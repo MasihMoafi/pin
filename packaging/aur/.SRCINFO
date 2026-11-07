@@ -1,0 +1,24 @@
+pkgbase = pinned-bin
+	pkgdesc = Pin: an always-on-top priority note; ranked, colored tasks with subtasks and dates, saved as Markdown
+	pkgver = 0.2.4
+	pkgrel = 1
+	url = https://github.com/MasihMoafi/pin
+	arch = x86_64
+	license = MIT
+	depends = gtk3
+	depends = nss
+	depends = alsa-lib
+	depends = libxss
+	depends = libxtst
+	depends = xdg-utils
+	depends = libnotify
+	depends = at-spi2-core
+	depends = libsecret
+	provides = pinned
+	conflicts = pinned
+	options = !strip
+	options = !debug
+	source = pinned_0.2.4_amd64.deb::https://github.com/MasihMoafi/pin/releases/download/v0.2.4/pinned_0.2.4_amd64.deb
+	sha256sums = d21bd26074f58175bbeb8af91d186419fdd23310c53c35fe3849caaf038b3c56
+
+pkgname = pinned-bin
