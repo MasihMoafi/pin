@@ -18,9 +18,10 @@ jobs:
         run: LC_ALL=C pacman -V | sed -r "s#[0-9]+#XX#g" | md5sum | cut -c1-6
       - name: Build as a normal user
         run: |
+          pacman -S --noconfirm --needed $(bash -c "source packaging/aur/PKGBUILD; echo \${depends[@]}")
           useradd -m builder
           cp -r packaging/aur /home/builder/pkg && chown -R builder /home/builder/pkg
-          su builder -c 'cd ~/pkg && makepkg --printsrcinfo > .SRCINFO && makepkg -s --noconfirm --skippgpcheck'
+          su builder -c 'cd ~/pkg && makepkg --printsrcinfo > .SRCINFO && makepkg --noconfirm --skippgpcheck'
           namcap /home/builder/pkg/PKGBUILD /home/builder/pkg/*.pkg.tar.zst || true
           pacman -U --noconfirm /home/builder/pkg/*.pkg.tar.zst
           test -x /usr/bin/pinned && test -f /usr/share/applications/pinned.desktop
