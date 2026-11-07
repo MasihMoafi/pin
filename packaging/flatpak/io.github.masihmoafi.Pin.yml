@@ -1,0 +1,42 @@
+id: io.github.masihmoafi.Pin
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: pin
+separate-locales: false
+finish-args:
+  - --share=ipc
+  # "Always on top" needs X11 (XWayland); Pin starts with --ozone-platform=x11.
+  - --socket=x11
+  - --device=dri
+  # The list lives in Documents/Pin.md by default.
+  - --filesystem=xdg-documents
+modules:
+  - name: pin
+    buildsystem: simple
+    sources:
+      - type: file
+        dest-filename: pinned.deb
+        url: https://github.com/MasihMoafi/pin/releases/download/v0.2.5/pinned_0.2.5_amd64.deb
+        sha256: f1f4ada6437ccf3cfa29f12d7aa1ed86e9436f44c4ae9aac439a43c5c60829cd
+        only-arches: [x86_64]
+      - type: git
+        url: https://github.com/MasihMoafi/pin.git
+        tag: v0.2.5
+        commit: 5fdf19c045a2efba564062b0df495ba185264112
+        dest: src
+      - type: script
+        dest-filename: pin.sh
+        commands:
+          - exec zypak-wrapper /app/pin/pinned --ozone-platform=x11 "$@"
+    build-commands:
+      - ar x pinned.deb
+      - tar -xf data.tar.*
+      - cp -a opt/Pin /app/pin
+      - rm -f /app/pin/chrome-sandbox
+      - install -Dm755 pin.sh /app/bin/pin
+      - install -Dm644 src/packaging/flatpak/io.github.masihmoafi.Pin.metainfo.xml /app/share/metainfo/io.github.masihmoafi.Pin.metainfo.xml
+      - install -Dm644 src/packaging/flatpak/io.github.masihmoafi.Pin.desktop /app/share/applications/io.github.masihmoafi.Pin.desktop
+      - install -Dm644 src/build/icon.png /app/share/icons/hicolor/512x512/apps/io.github.masihmoafi.Pin.png
