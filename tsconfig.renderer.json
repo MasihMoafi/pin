@@ -1,0 +1,15 @@
+{
+  // The page: ES modules loaded by index.html.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "rootDir": "./src/renderer",
+    "outDir": "./dist/renderer",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src/renderer/**/*.ts"]
+}

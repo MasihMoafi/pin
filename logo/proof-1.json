@@ -1,0 +1,98 @@
+[
+  {
+    "name": "option-1",
+    "theme": "light",
+    "size": 24,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.05604575163398692,
+    "changedPixels": 0.13194444444444445,
+    "foregroundMeanDifference": 0.16360083552321272,
+    "foregroundChangedPixels": 0.3917525773195876,
+    "foregroundPixels": 194
+  },
+  {
+    "name": "option-1",
+    "theme": "light",
+    "size": 48,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.058761687545388526,
+    "changedPixels": 0.11371527777777778,
+    "foregroundMeanDifference": 0.1866764434305578,
+    "foregroundChangedPixels": 0.3628808864265928,
+    "foregroundPixels": 722
+  },
+  {
+    "name": "option-1",
+    "theme": "light",
+    "size": 128,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.06087933708639706,
+    "changedPixels": 0.09869384765625,
+    "foregroundMeanDifference": 0.20763022483932747,
+    "foregroundChangedPixels": 0.3372262773722628,
+    "foregroundPixels": 4795
+  },
+  {
+    "name": "option-1",
+    "theme": "light",
+    "size": 512,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.06188304626863766,
+    "changedPixels": 0.0887908935546875,
+    "foregroundMeanDifference": 0.2177606282654506,
+    "foregroundChangedPixels": 0.3125553914327917,
+    "foregroundPixels": 74470
+  },
+  {
+    "name": "option-1",
+    "theme": "dark",
+    "size": 24,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.02459831154684096,
+    "changedPixels": 0.08159722222222222,
+    "foregroundMeanDifference": 0.0746864511570394,
+    "foregroundChangedPixels": 0.25405405405405407,
+    "foregroundPixels": 185
+  },
+  {
+    "name": "option-1",
+    "theme": "dark",
+    "size": 48,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.025818128177196805,
+    "changedPixels": 0.08506944444444445,
+    "foregroundMeanDifference": 0.08432775112906393,
+    "foregroundChangedPixels": 0.2804005722460658,
+    "foregroundPixels": 699
+  },
+  {
+    "name": "option-1",
+    "theme": "dark",
+    "size": 128,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.026384819878472222,
+    "changedPixels": 0.0872802734375,
+    "foregroundMeanDifference": 0.09082762953410707,
+    "foregroundChangedPixels": 0.301433389544688,
+    "foregroundPixels": 4744
+  },
+  {
+    "name": "option-1",
+    "theme": "dark",
+    "size": 512,
+    "paths": 1,
+    "bytes": 2616,
+    "meanDifference": 0.026892289305044934,
+    "changedPixels": 0.08575820922851562,
+    "foregroundMeanDifference": 0.09487226617608766,
+    "foregroundChangedPixels": 0.30279072273253776,
+    "foregroundPixels": 74246
+  }
+]

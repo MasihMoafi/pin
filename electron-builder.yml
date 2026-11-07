@@ -1,0 +1,35 @@
+appId: io.github.masihmoafi.pin
+productName: Pin
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - index.html
+  - style.css
+  - logo/pin.svg
+  - logo/pin-256.png
+  - package.json
+extraFiles:
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+
+linux:
+  target: [snap, AppImage, deb]
+  icon: build/icon.png
+  category: Utility
+  synopsis: Always-on-top priority note
+  description: >-
+    Pin keeps your ranked priorities on top of every window: colored tasks, subtasks and dates,
+    edited in place and saved as plain Markdown that other notes apps can read.
+  executableName: pin
+  desktop:
+    StartupWMClass: pin
+
+snap:
+  confinement: strict
+  grade: stable
+  summary: Always-on-top priority note
+  plugs: [default, home]

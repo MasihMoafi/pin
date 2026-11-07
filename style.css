@@ -1,0 +1,76 @@
+:root {
+  --bg: #fdfcf7; --ink: #1d1f23; --mute: #6f6a5c; --line: #ebe7da; --hover: #f3f0e6; --accent: #2f6fbe;
+  --row: 34px; --indent: 22px;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
+  font: 14px/20px Inter, "Noto Sans", system-ui, sans-serif; border: 1px solid #d9d3bf; overflow: hidden;
+}
+button { font: inherit; color: var(--mute); background: none; border: 0; border-radius: 6px; cursor: pointer; }
+button:hover { background: var(--hover); color: var(--ink); }
+
+header {
+  -webkit-app-region: drag; display: flex; align-items: center; gap: 4px;
+  height: 44px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--line);
+}
+header h1 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }
+header button { -webkit-app-region: no-drag; height: 28px; }
+header .ghost { padding: 0 10px 0 6px; display: flex; align-items: center; gap: 4px; }
+header .icon { width: 30px; display: grid; place-items: center; }
+/* The pin toggle, as Elpis draws a kept pin: filled in its own color while Pin floats on top, outline when not. */
+header .pin.on { color: var(--ink); }
+header .pin.on svg { fill: currentColor; }
+
+main { flex: 1; overflow: auto; padding: 8px 8px 24px; }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul { padding-left: var(--indent); }
+
+/* One row: handle | checkbox | title | when | menu. Every column has a fixed width except the title. */
+.row {
+  position: relative; display: grid; grid-template-columns: 16px 14px 1fr auto; align-items: start; column-gap: 8px;
+  min-height: var(--row); padding: 7px 10px 7px 12px; border-radius: 8px; margin: 1px 0;
+}
+.row:hover { background: var(--hover); }
+.row.tint { background: var(--tint); }
+.row.tint:hover { filter: brightness(.97); }
+.dot { width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 1px solid #0000002e; background: #fff; cursor: pointer; padding: 0; }
+.dot:hover { box-shadow: 0 0 0 3px #00000014; }
+.actions-hover { position: absolute; right: 6px; top: 5px; display: none; gap: 2px; padding-left: 8px; background: inherit; border-radius: 6px; }
+.row:hover .actions-hover, .row:focus-within .actions-hover { display: flex; }
+.addsub, .del, .more { width: 28px; height: 24px; padding: 0; display: grid; place-items: center; background: #ffffffb3; }
+.del:hover { color: #b3261e; }
+.handle { position: absolute; left: -2px; top: 7px; width: 14px; height: 20px; color: #9f987f; cursor: grab; user-select: none; display: grid; place-items: center; visibility: hidden; }
+.row:hover .handle { visibility: visible; }
+.check { width: 16px; height: 16px; margin: 2px 0 0; accent-color: #2f9e5b; cursor: pointer; }
+.title { outline: none; min-height: 20px; word-break: break-word; padding: 0 2px; border-radius: 4px; }
+.title:focus { background: #ffffff8c; box-shadow: 0 0 0 1px #0000001f; }
+.title:empty::before { content: "New task"; color: #b3ad9a; }
+.done .title { color: #9a9585; text-decoration: line-through; }
+.when { font-size: 12px; line-height: 20px; color: var(--mute); white-space: nowrap; cursor: pointer; padding: 0 4px; border-radius: 4px; }
+.when:hover { background: #0000000d; }
+.when.today { color: #1f7a45; font-weight: 600; }
+.when.late { color: #b3261e; font-weight: 600; }
+.row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+
+.pop {
+  position: fixed; z-index: 10; min-width: 200px; padding: 6px; background: #fff;
+  border: 1px solid #ddd8c8; border-radius: 10px; box-shadow: 0 8px 24px #0000001f;
+}
+.pop button { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 10px; text-align: left; color: var(--ink); }
+.pop hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+.pop .swatches { display: grid; grid-template-columns: repeat(7, 22px); gap: 8px; padding: 6px 8px 8px; }
+.pop .swatches button { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid #0000002a; }
+.pop .swatches button.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
+.pop .label { font-size: 12px; color: var(--mute); padding: 4px 10px 2px; }
+.pop .fields { display: grid; grid-template-columns: 1fr 96px; gap: 6px; padding: 4px 8px; }
+.pop input { font: inherit; height: 30px; padding: 0 6px; border: 1px solid #d9d3bf; border-radius: 6px; background: #fff; }
+.pop .actions { display: flex; gap: 6px; padding: 6px 8px 2px; }
+.pop .actions button { justify-content: center; border: 1px solid #d9d3bf; }
+.pop .actions button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+svg { display: block; flex: none; }
+.pop button svg { color: var(--mute); }
+.pop .custom { position: relative; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--mute); border: 1px dashed #0000004d; cursor: pointer; }
+.pop .custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

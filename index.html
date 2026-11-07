@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Pin</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Pin</h1>
+  <button id="add" class="ghost" title="New task on top"></button>
+  <button id="pin" class="icon pin on" title="Pinned on top: click to unpin" aria-pressed="true"></button>
+  <button id="close" class="icon" title="Close"></button>
+</header>
+<main><ul id="list" class="tree"></ul></main>
+<div id="menu" class="pop" hidden></div>
+<script type="module" src="dist/renderer/app.js"></script>
+</body>
+</html>

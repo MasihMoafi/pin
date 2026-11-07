@@ -1,0 +1,26 @@
+{
+  "name": "pin",
+  "productName": "Pin",
+  "version": "0.2.0",
+  "description": "An always-on-top priority note: ranked, colored tasks with subtasks and dates, saved as plain Markdown.",
+  "author": "Masih Moafi",
+  "license": "MIT",
+  "homepage": "https://github.com/MasihMoafi/pin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MasihMoafi/pin.git"
+  },
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json",
+    "start": "./start.sh",
+    "test": "node --test test/board.test.ts",
+    "dist": "npm run build && electron-builder --linux snap AppImage deb"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0",
+    "typescript": "^5.9.3"
+  }
+}

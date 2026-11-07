@@ -1,0 +1,49 @@
+name: Release
+
+# Every push and pull request: type-check, build and test. A version tag (v*) also builds the Snap, AppImage and .deb,
+# attaches them to a GitHub release, and uploads the Snap to the store's edge channel.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node --experimental-strip-types --test test/board.test.ts
+
+  package:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: samuelmeuli/action-snapcraft@v3
+      - run: npm ci
+      - run: npm run dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.snap
+            release/*.AppImage
+            release/*.deb
+      - name: Upload to the Snap Store (edge)
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: snapcraft upload --release=edge release/*.snap
