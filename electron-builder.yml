@@ -33,4 +33,4 @@ snap:
   confinement: strict
   grade: stable
   summary: Always-on-top priority note
-  plugs: [default, home]
+  plugs: [default]
