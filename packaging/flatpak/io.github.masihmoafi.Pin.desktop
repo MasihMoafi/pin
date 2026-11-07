@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Pin
+Comment=Keep your ranked priorities on top of every window
+Exec=pin %U
+Icon=io.github.masihmoafi.Pin
+Terminal=false
+Categories=Office;ProjectManagement;
+Keywords=todo;tasks;priorities;sticky;note;
+StartupWMClass=pin

@@ -25,6 +25,8 @@ linux:
     Pin keeps your ranked priorities on top of every window: colored tasks, subtasks and dates,
     edited in place and saved as plain Markdown that other notes apps can read.
   executableName: pinned
+  # "Always on top" needs X11 (XWayland); Electron picks Wayland otherwise.
+  executableArgs: ["--ozone-platform=x11"]
   desktop:
     entry:
       StartupWMClass: pin
@@ -34,3 +36,4 @@ snap:
   grade: stable
   summary: Always-on-top priority note
   plugs: [default]
+  executableArgs: ["--ozone-platform=x11"]

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.masihmoafi.Pin</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Pin</name>
+  <summary>Keep your ranked priorities on top of every window</summary>
+  <developer id="io.github.masihmoafi">
+    <name>Masih Moafi</name>
+  </developer>
+  <description>
+    <p>Pin is a small priority note that stays above your other windows. Each line is a task: drag it up or down to rank it, color it, give it subtasks and a date, and tick it off.</p>
+    <ul>
+      <li>Twelve colors plus any custom color</li>
+      <li>Subtasks with one click or Ctrl+T, dates with Ctrl+D</li>
+      <li>Undo and redo for every change</li>
+      <li>Unpin it with one click when you need the space</li>
+      <li>Your list is a plain Markdown file in your Documents folder, readable by any notes app</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.masihmoafi.Pin.desktop</launchable>
+  <url type="homepage">https://github.com/MasihMoafi/pin</url>
+  <url type="bugtracker">https://github.com/MasihMoafi/pin/issues</url>
+  <url type="vcs-browser">https://github.com/MasihMoafi/pin</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/MasihMoafi/pin/main/assets/screenshot.png</image>
+      <caption>Ranked, colored tasks with subtasks and dates</caption>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#fdfcf7</color>
+    <color type="primary" scheme_preference="dark">#2b2a26</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <releases>
+    <release version="0.2.5" date="2026-11-07">
+      <description>
+        <p>Stays on top under Wayland desktops; first Flathub release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
