@@ -1,9 +1,12 @@
 {
   "name": "pinned",
   "productName": "Pin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "An always-on-top priority note: ranked, colored tasks with subtasks and dates, saved as plain Markdown.",
-  "author": "Masih Moafi",
+  "author": {
+    "name": "Masih Moafi",
+    "email": "132553157+MasihMoafi@users.noreply.github.com"
+  },
   "license": "MIT",
   "homepage": "https://github.com/MasihMoafi/pin",
   "repository": {
