@@ -23,7 +23,13 @@ header .icon { width: 30px; display: grid; place-items: center; }
 header .pin.on { color: var(--ink); }
 header .pin.on svg { fill: currentColor; }
 
-main { flex: 1; overflow: auto; padding: 8px 8px 24px; }
+main { flex: 1; overflow: auto; padding: 8px 8px 24px; scrollbar-gutter: stable; }
+/* A thin, quiet scrollbar instead of the system's gray bar with arrows. */
+main::-webkit-scrollbar { width: 8px; }
+main::-webkit-scrollbar-button { display: none; }
+main::-webkit-scrollbar-track { background: transparent; }
+main::-webkit-scrollbar-thumb { background: #00000024; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+main::-webkit-scrollbar-thumb:hover { background-color: #00000040; }
 .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
 .tree ul { padding-left: var(--indent); }
 
@@ -39,6 +45,9 @@ main { flex: 1; overflow: auto; padding: 8px 8px 24px; }
 .dot:hover { box-shadow: 0 0 0 3px #00000014; }
 .actions-hover { position: absolute; right: 6px; top: 5px; display: none; gap: 2px; padding-left: 8px; background: inherit; border-radius: 6px; }
 .row:hover .actions-hover, .row:focus-within .actions-hover { display: flex; }
+/* While the buttons show, the text makes room for them instead of hiding under them. */
+.row:hover, .row:focus-within { padding-right: 106px; }
+.row:hover .when, .row:focus-within .when { display: none; }
 .addsub, .del, .more { width: 28px; height: 24px; padding: 0; display: grid; place-items: center; background: #ffffffb3; }
 .del:hover { color: #b3261e; }
 .handle { position: absolute; left: -2px; top: 7px; width: 14px; height: 20px; color: #9f987f; cursor: grab; user-select: none; display: grid; place-items: center; visibility: hidden; }
