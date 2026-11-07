@@ -30,3 +30,4 @@ jobs:
         with:
           name: srcinfo
           path: packaging/aur/.SRCINFO
+          include-hidden-files: true
