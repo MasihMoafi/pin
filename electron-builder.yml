@@ -26,7 +26,8 @@ linux:
     edited in place and saved as plain Markdown that other notes apps can read.
   executableName: pinned
   desktop:
-    StartupWMClass: pin
+    entry:
+      StartupWMClass: pin
 
 snap:
   confinement: strict
