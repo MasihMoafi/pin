@@ -1,0 +1,24 @@
+Pin on Flathub: what you do (about 5 minutes, by hand; Flathub forbids AI-made submissions)
+
+1. Fork https://github.com/flathub/flathub (untick "Copy the main branch only").
+2. In your fork, create a branch from `new-pr`, e.g. `pin`.
+3. Add one file at the top level: io.github.masihmoafi.Pin.yml
+   (copy it from ~/Desktop/p/pin/packaging/flatpak/io.github.masihmoafi.Pin.yml).
+4. Open a pull request against flathub/flathub, base branch `new-pr`, title: Add io.github.masihmoafi.Pin
+5. Fill their checklist honestly. Text you can use or change:
+
+Description:
+Pin is a small always-on-top priority note. Tasks can be reordered, colored, given subtasks and dates,
+and the list is saved as a plain Markdown file in Documents. Electron app, X11 (XWayland) because
+staying on top is not possible for native Wayland clients.
+
+AI disclosure:
+Most of the application code and the Flatpak packaging were written with AI coding assistants
+(Claude, Codex) under my direction; I reviewed, tested and maintain it.
+
+Video: record ~20 seconds of the Flatpak running (GNOME screen recorder: Ctrl+Shift+Alt+R).
+  Install the test build first: Actions -> "Flatpak check" -> latest run -> artifact pin-x86_64.flatpak,
+  then: flatpak install --user pin-x86_64.flatpak
+
+Note: Flathub asks for a meaningful development history; Pin is new (Nov 2026), so they may ask you to
+come back after some releases and real use.
