@@ -7,7 +7,7 @@ subtasks and a date. The list is a plain Markdown file, so any notes app can rea
 
 ## Install
 
-- Snap: `sudo snap install pin` (after the first store release)
+- Snap: `sudo snap install pinned` (after the first store release)
 - AppImage and `.deb`: from the GitHub release page
 
 ## Use
@@ -27,7 +27,7 @@ subtasks and a date. The list is a plain Markdown file, so any notes app can rea
 ## The list file
 
 Pin edits `Pin.md` in your Documents folder. To use another file, write its path in
-`~/.config/Pin/settings.json` (Snap: `~/snap/pin/current/.config/Pin/settings.json`):
+`~/.config/Pin/settings.json` (Snap: `~/snap/pinned/current/.config/Pin/settings.json`):
 
 ```json
 { "file": "~/Notes/priorities.md" }

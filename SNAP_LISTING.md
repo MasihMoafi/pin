@@ -1,6 +1,6 @@
 # Snap Store listing for Pin
 
-Paste into https://snapcraft.io/pin/listing after `snapcraft register pin`.
+Paste into https://snapcraft.io/pinned/listing (name `pinned` registered 7 Nov).
 
 - **Title:** Pin
 - **Summary:** Always-on-top priority note

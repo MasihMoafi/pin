@@ -1,5 +1,5 @@
 {
-  "name": "pin",
+  "name": "pinned",
   "productName": "Pin",
   "version": "0.2.0",
   "description": "An always-on-top priority note: ranked, colored tasks with subtasks and dates, saved as plain Markdown.",
