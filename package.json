@@ -1,11 +1,11 @@
 {
   "name": "pinned",
   "productName": "Pin",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "An always-on-top priority note: ranked, colored tasks with subtasks and dates, saved as plain Markdown.",
   "author": {
     "name": "Masih Moafi",
-    "email": "132553157+MasihMoafi@users.noreply.github.com"
+    "email": "hi@masihmoafi.com"
   },
   "license": "MIT",
   "homepage": "https://github.com/MasihMoafi/pin",
@@ -18,7 +18,7 @@
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json",
     "start": "./start.sh",
     "test": "node --test test/board.test.ts",
-    "dist": "npm run build && electron-builder --linux snap AppImage deb"
+    "dist": "npm run build && electron-builder --linux snap AppImage deb --publish never"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
