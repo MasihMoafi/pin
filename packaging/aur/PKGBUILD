@@ -1,0 +1,23 @@
+# Maintainer: Masih Moafi <hi@masihmoafi.com>
+pkgname=pinned-bin
+_appname=pinned
+pkgver=0.2.4
+pkgrel=1
+pkgdesc='Pin: an always-on-top priority note; ranked, colored tasks with subtasks and dates, saved as Markdown'
+arch=('x86_64')
+url='https://github.com/MasihMoafi/pin'
+license=('MIT')
+depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'xdg-utils' 'libnotify' 'at-spi2-core' 'libsecret')
+provides=('pinned')
+conflicts=('pinned')
+options=('!strip' '!debug')
+source=("${_appname}_${pkgver}_amd64.deb::https://github.com/MasihMoafi/pin/releases/download/v${pkgver}/${_appname}_${pkgver}_amd64.deb")
+sha256sums=('d21bd26074f58175bbeb8af91d186419fdd23310c53c35fe3849caaf038b3c56')
+
+package() {
+  bsdtar -xf data.tar.* -C "$pkgdir"
+  install -dm755 "$pkgdir/usr/bin"
+  chmod 4755 "$pkgdir/opt/Pin/chrome-sandbox"
+  ln -sf "/opt/Pin/${_appname}" "$pkgdir/usr/bin/${_appname}"
+  install -Dm644 "$pkgdir/opt/Pin/LICENSE.electron.txt" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.electron.txt"
+}
