@@ -1,7 +1,7 @@
 name: Release
 
 # Every push and pull request: type-check, build and test. A version tag (v*) also builds the Snap, AppImage and .deb,
-# attaches them to a GitHub release, and uploads the Snap to the store's edge channel.
+# attaches them to a GitHub release, and uploads the Snap to the store (stable and edge), so installs update themselves.
 on:
   push:
     branches: [main]
@@ -46,4 +46,4 @@ jobs:
         if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        run: snapcraft upload --release=edge release/*.snap
+        run: snapcraft upload --release=stable,edge release/*.snap
