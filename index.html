@@ -9,10 +9,18 @@
 <body>
 <header>
   <h1>Pin</h1>
-  <button id="add" class="ghost" title="New task on top"></button>
+  <button id="add" class="ghost" title="New task on top" disabled></button>
   <button id="pin" class="icon pin on" title="Pinned on top: click to unpin" aria-pressed="true"></button>
   <button id="close" class="icon" title="Close"></button>
 </header>
+<aside id="sync-notice" class="notice" role="alert" hidden>
+  <div id="sync-message"></div>
+  <div class="notice-actions">
+    <button id="sync-disk" hidden>Use disk version</button>
+    <button id="sync-mine" hidden>Overwrite disk with mine</button>
+    <button id="sync-retry" hidden>Retry</button>
+  </div>
+</aside>
 <main><ul id="list" class="tree"></ul></main>
 <div id="menu" class="pop" hidden></div>
 <script type="module" src="dist/renderer/app.js"></script>

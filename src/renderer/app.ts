@@ -3,7 +3,6 @@
 import { type Board, type Color, type Item, type Named, COLORS, parse, serialize } from './board.js';
 import { icon, type IconName } from './icons.js';
 
-const TINT: Record<Named, string> = { '🟢': '#b9ecc9', '🔵': '#b8d8f5', '🟣': '#e2d3f7', '🟠': '#ffe2bf', '🟡': '#fff0a8', '🔴': '#fdc6c7' };
 const EDGE: Record<Named, string> = { '🟢': '#2f9e5b', '🔵': '#2f6fbe', '🟣': '#7e57c2', '🟠': '#e07b16', '🟡': '#d4a800', '🔴': '#d23b3b' };
 const NAMES: Record<string, string> = {
   '🟢': 'Green', '🔵': 'Blue', '🟣': 'Purple', '🟠': 'Orange', '🟡': 'Yellow', '🔴': 'Red',
@@ -12,7 +11,6 @@ const NAMES: Record<string, string> = {
 // The palette: Rustidian's six named colors, then more as plain hex colors.
 const PALETTE: Color[] = [...COLORS, '#ec4899', '#14b8a6', '#06b6d4', '#84cc16', '#a16207', '#64748b'];
 const solid = (c: Color): string => (!c ? '' : c.startsWith('#') ? c : EDGE[c as Named]);
-const tint = (c: Color): string => (!c ? '' : c.startsWith('#') ? c + '55' : TINT[c as Named]);
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const list = $<HTMLUListElement>('list');
@@ -28,6 +26,13 @@ let typing: Timer | null = null;
 let writeTimer: Timer | undefined;
 let dragged: Item | null = null;
 let pinned = true;
+let disk: string | null | undefined;
+let clean = '';
+let conflict: string | null | undefined;
+let storageError: 'read' | 'save' | null = null;
+let saving: Promise<void> | null = null;
+let attemptedText: string | null = null;
+let diskEvents = 0;
 const undoStack: Snapshot[] = [];
 const redoStack: Snapshot[] = [];
 const elOf = new Map<Item, HTMLElement>();
@@ -122,7 +127,68 @@ function atEdge(el: HTMLElement, up: boolean): boolean {
 
 // ---------- saving and undo ----------
 const snapshot = (): Snapshot => ({ text: serialize(board), focus: focusState() });
-function write(): void { clearTimeout(writeTimer); writeTimer = setTimeout(() => void host.write(serialize(board)), 250); }
+function write(): void {
+  clearTimeout(writeTimer);
+  if (disk !== undefined && conflict === undefined && !storageError) writeTimer = setTimeout(() => void flush(), 250);
+}
+function notice(): void {
+  const box = $<HTMLElement>('sync-notice');
+  box.hidden = !storageError && conflict === undefined;
+  $<HTMLButtonElement>('sync-disk').hidden = !!storageError || conflict === undefined;
+  $<HTMLButtonElement>('sync-mine').hidden = !!storageError || conflict === undefined;
+  $<HTMLButtonElement>('sync-retry').hidden = !storageError;
+  $<HTMLElement>('sync-message').textContent = storageError
+    ? `Pin could not ${storageError} the list. Your edits are still here.`
+    : conflict === null
+      ? 'The list was removed from disk. Choose which version to keep.'
+      : 'The list changed on disk. Choose which version to keep.';
+}
+function loadDisk(version: string | null): void {
+  clearTimeout(writeTimer);
+  if (typing) clearTimeout(typing); typing = null;
+  disk = version; conflict = undefined; storageError = null;
+  board = parse(version ?? ''); clean = serialize(board);
+  undoStack.length = 0; redoStack.length = 0;
+  closeMenu(); render(); shown = snapshot(); notice();
+}
+function receiveDisk(version: string | null): void {
+  if (disk === undefined) return;
+  if (version === disk) {
+    if (conflict !== undefined) { conflict = undefined; notice(); write(); }
+    return;
+  }
+  if (version === attemptedText) return;
+  if (version === serialize(board)) {
+    disk = version; clean = version; conflict = undefined; notice(); return;
+  }
+  if (conflict !== undefined || storageError || saving || serialize(board) !== clean || !menu.hidden ||
+      (document.activeElement as HTMLElement | null)?.isContentEditable) {
+    conflict = version; clearTimeout(writeTimer); notice();
+  } else loadDisk(version);
+}
+async function flush(): Promise<void> {
+  clearTimeout(writeTimer);
+  if (saving) { await saving; return flush(); }
+  if (disk === undefined || conflict !== undefined || storageError) return;
+  const text = serialize(board);
+  if (text === clean) return;
+  const expected = disk;
+  attemptedText = text;
+  saving = (async () => {
+    try {
+      const result = await host.write(text, expected);
+      if (result.saved) {
+        disk = text; clean = text;
+        if (conflict === text) conflict = undefined;
+      } else if (result.disk === text) {
+        disk = text; clean = text; conflict = undefined;
+      } else receiveDisk(result.disk);
+    } catch { storageError = 'save'; }
+    finally { attemptedText = null; }
+  })();
+  await saving; saving = null; notice();
+  if (conflict === undefined && !storageError && serialize(board) !== clean) write();
+}
 function record(): void {
   if (typing) clearTimeout(typing); typing = null;
   const now = serialize(board);
@@ -138,7 +204,7 @@ function change(fn: () => void, focus?: { item: Item; caret?: number } | null): 
 }
 function restore(state: Snapshot): void {
   board = parse(state.text); render(); shown = state;
-  clearTimeout(writeTimer); void host.write(state.text);
+  write();
   const it = state.focus && itemAt(state.focus.path); if (it && state.focus) focusItem(it, state.focus.caret);
 }
 function undo(): void { if (typing) record(); const s = undoStack.pop(); if (!s) return; redoStack.push(snapshot()); restore(s); }
@@ -155,7 +221,7 @@ function render(): void {
 function node(item: Item): HTMLLIElement {
   const li = el('li');
   const row = el('div', 'row' + (item.done ? ' done' : '') + (item.color ? ' tint' : ''));
-  if (item.color) row.style.setProperty('--tint', tint(item.color));
+  if (item.color) row.style.setProperty('--task-color', solid(item.color));
   elOf.set(item, row);
 
   const handle = el('span', 'handle'); handle.innerHTML = icon('grip-vertical', 14); handle.title = 'Drag to reorder';
@@ -301,7 +367,7 @@ function swatches(item: Item): HTMLDivElement {
   const pick = (c: Color): void => { closeMenu(); change(() => { item.color = c; }); };
   for (const c of [...PALETTE, null]) {
     const b = el('button', item.color === c ? 'on' : ''); b.title = c ? NAMES[c] : 'No color';
-    b.style.background = c ? solid(c) : '#fff';
+    b.style.background = c ? solid(c) : 'var(--popup)';
     b.onclick = () => pick(c);
     sw.append(b);
   }
@@ -352,7 +418,14 @@ const closeBtn = $<HTMLButtonElement>('close');
 addBtn.innerHTML = icon('plus', 18) + '<span>New task</span>';
 addBtn.onclick = () => { const n = blank(board.items[0]?.color ?? '🟢'); change(() => { board.items.unshift(n); }, { item: n }); };
 closeBtn.innerHTML = icon('x', 18);
-closeBtn.onclick = () => host.close();
+async function requestClose(): Promise<void> {
+  await flush();
+  if ((conflict !== undefined || storageError || (disk !== undefined && serialize(board) !== clean)) &&
+      !window.confirm('Your changes are not saved. Close Pin and discard them?')) return;
+  host.close();
+}
+closeBtn.onclick = () => void requestClose();
+host.onCloseRequested(() => void requestClose());
 // The pin toggle, as Elpis draws a kept pin: filled in its own color while Pin floats on top, outline when not.
 pinBtn.innerHTML = icon('pin', 18);
 pinBtn.onclick = () => {
@@ -361,8 +434,31 @@ pinBtn.onclick = () => {
   pinBtn.title = pinned ? 'Pinned on top: click to unpin' : 'Not on top: click to pin';
 };
 
-host.onChanged((text) => {
-  if ((document.activeElement as HTMLElement | null)?.isContentEditable || text === serialize(board)) return;
-  board = parse(text); render(); record();
-});
-void host.read().then((text) => { board = parse(text); render(); shown = snapshot(); });
+host.onChanged((version) => { diskEvents++; receiveDisk(version); });
+host.onStorageError(() => { storageError = 'read'; notice(); });
+async function readLatest(): Promise<string | null> {
+  let seen: number; let version: string | null;
+  do { seen = diskEvents; version = await host.read(); } while (seen !== diskEvents);
+  return version;
+}
+$<HTMLButtonElement>('sync-disk').onclick = () => void (async () => {
+  if (saving) await saving;
+  try { loadDisk(await readLatest()); }
+  catch { storageError = 'read'; notice(); }
+})();
+$<HTMLButtonElement>('sync-mine').onclick = () => void (async () => {
+  if (saving) await saving;
+  if (conflict === undefined) return;
+  disk = conflict; conflict = undefined; clean = '\0'; notice();
+  await flush();
+})();
+async function retry(): Promise<void> {
+  try {
+    const version = await readLatest();
+    storageError = null;
+    if (disk === undefined) { loadDisk(version); addBtn.disabled = false; }
+    else { receiveDisk(version); notice(); write(); }
+  } catch { storageError = 'read'; notice(); }
+}
+$<HTMLButtonElement>('sync-retry').onclick = () => void retry();
+void retry();

@@ -22,3 +22,15 @@ test('old lines without checkboxes still read, and an unknown marker is kept as 
   assert.equal(board.items[1].color, null);
   assert.equal(board.items[1].text, '==Q not a color==');
 });
+
+test('all twelve task colors survive a file round trip', () => {
+  const md = [
+    '- [ ] ==🟢Green==', '- [ ] ==🔵Blue==', '- [ ] ==🟣Purple==',
+    '- [ ] ==🟠Orange==', '- [ ] ==🟡Yellow==', '- [ ] ==🔴Red==',
+    ...['#ec4899', '#14b8a6', '#06b6d4', '#84cc16', '#a16207', '#64748b']
+      .map((color) => `- [ ] <mark style="background: ${color};">Task</mark>`),
+  ].join('\n') + '\n';
+  const board = parse(md);
+  assert.equal(board.items.length, 12);
+  assert.equal(serialize(board), md);
+});

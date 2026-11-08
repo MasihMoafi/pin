@@ -198,6 +198,7 @@ key("z", CTRL)
 key("z", CTRL)
 check("undo date and color", file() == start)
 # external edit appears
+ev("document.activeElement.blur()")
 FILE.write_text(start.replace("RAG-MCP", "RAG MCP"))
 time.sleep(2.5)
 check(
@@ -285,3 +286,5 @@ ev("document.querySelector('.fold').click()")
 time.sleep(0.4)
 check("the fold arrow shows them again", "Old child" in ev(titles))
 print("ALL PASS" if ok else "SOME FAILED")
+if not ok:
+    sys.exit(1)

@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json",
     "start": "./start.sh",
-    "test": "node --test test/board.test.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
     "dist": "npm run build && electron-builder --linux snap AppImage deb --publish never"
   },
   "devDependencies": {
