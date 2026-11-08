@@ -1,8 +1,9 @@
 // Pin: an always-on-top, resizable window that edits a Markdown priority list.
-import { app, BrowserWindow, ipcMain, nativeImage, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, nativeTheme, screen } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { type DiskVersion, readList, saveList } from './storage';
 
 const ROOT = path.join(__dirname, '..');
 const STATE = path.join(app.getPath('userData'), 'bounds.json');
@@ -33,9 +34,10 @@ function bounds(): Bounds {
 app.whenReady().then(() => {
   const win = new BrowserWindow({
     ...bounds(), minWidth: 300, minHeight: 220, frame: false, alwaysOnTop: true,
-    title: 'Pin', icon: ICON, backgroundColor: '#fdfcf7',
+    title: 'Pin', icon: ICON, backgroundColor: nativeTheme.shouldUseDarkColors ? '#1d2024' : '#fdfcf7',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
   });
+  nativeTheme.on('updated', () => win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#1d2024' : '#fdfcf7'));
   win.setAlwaysOnTop(true, 'floating');
   const logo = nativeImage.createFromPath(ICON);
   if (!logo.isEmpty()) win.setIcon(logo);
@@ -48,23 +50,30 @@ app.whenReady().then(() => {
   win.on('resized', save);
 
   const FILE = listFile();
-  let lastWrite = '';
+  let lastSeen: DiskVersion | undefined;
   ipcMain.handle('read', () => {
-    try { return fs.readFileSync(FILE, 'utf8'); } catch { return ''; }
+    lastSeen = readList(FILE);
+    return lastSeen;
   });
-  ipcMain.handle('write', (_e, text: string) => {
-    lastWrite = text;
-    const tmp = FILE + '.tmp';
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    fs.writeFileSync(tmp, text);
-    fs.renameSync(tmp, FILE);
+  ipcMain.handle('write', (_e, text: string, expected: DiskVersion) => {
+    const result = saveList(FILE, text, expected);
+    lastSeen = result.saved ? text : result.disk;
+    return result;
   });
-  ipcMain.on('close', () => app.quit());
+  let closing = false;
+  win.on('close', (event) => {
+    if (!closing) { event.preventDefault(); win.webContents.send('request-close'); }
+  });
+  ipcMain.on('close', () => { closing = true; app.quit(); });
   ipcMain.on('pin', (_e, on: boolean) => win.setAlwaysOnTop(on, 'floating'));
-  fs.watchFile(FILE, { interval: 1000 }, () => {
-    let text: string;
-    try { text = fs.readFileSync(FILE, 'utf8'); } catch { return; }
-    if (text !== lastWrite) win.webContents.send('changed', text);
+  fs.watchFile(FILE, { interval: 500 }, () => {
+    try {
+      const disk = readList(FILE);
+      if (disk !== lastSeen) { lastSeen = disk; win.webContents.send('changed', disk); }
+    } catch {
+      win.webContents.send('storage-error');
+    }
   });
+  win.on('closed', () => fs.unwatchFile(FILE));
 });
 app.on('window-all-closed', () => app.quit());
