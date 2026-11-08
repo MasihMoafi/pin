@@ -19,6 +19,8 @@ this file lists only what is particular to Pin. Code is TypeScript (`src/`), bui
 - Follow the desktop light/dark preference live, including menus, fields and task colors.
 
 ## Tasks
+- Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
+  Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
 - Each row on hover: + (subtask), trash (delete), ⋯ (color, date, subtask, delete).
 - A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
   away (also Ctrl+. and the ⋯ menu); the folded tasks are remembered on this computer, never written to the file.

@@ -22,6 +22,12 @@ export interface Board {
   items: Item[];
 }
 
+/** Keep unfinished siblings in priority order, with completed tasks and their branches below them. */
+export function completedLast(items: Item[]): void {
+  items.sort((a, b) => Number(a.done) - Number(b.done));
+  for (const item of items) completedLast(item.children);
+}
+
 const ITEM = /^(\s*)[-*] (?:\[([ xX])\] )?(.*)$/;
 const DATE = /\s*📅\s?(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?\s*$/;
 const NAMED = /^==(\S{1,2}?)(.*)==$/u;

@@ -160,7 +160,11 @@ check("Alt+Down moves the task down", "Workflow test" in lines()[2])
 key("z", CTRL)
 focus_end(1)
 key("Enter", CTRL)
-check("Ctrl+Enter marks it done", lines()[1].startswith("- [x]"))
+check("Ctrl+Enter completes the task and moves it to the bottom", lines()[-1].startswith("- [x]") and "Workflow test" in lines()[-1])
+key("z", CTRL)
+check("undo restores completion and priority together", file() == start)
+key("y", CTRL)
+check("redo restores completion and its position", lines()[-1].startswith("- [x]") and "Workflow test" in lines()[-1])
 key("z", CTRL)
 # arrow navigation
 focus_end(0)
@@ -285,6 +289,42 @@ check("a folded task stays folded after a restart", "Old child" not in ev(titles
 ev("document.querySelector('.fold').click()")
 time.sleep(0.4)
 check("the fold arrow shows them again", "Old child" in ev(titles))
+# Completion keeps each subtree together and keeps unfinished siblings in priority order.
+ev("document.activeElement.blur()")
+completion_start = (
+    "- [ ] ==🟢Parent==\n"
+    "  - [ ] First child\n"
+    "    - [ ] Grandchild\n"
+    "  - [ ] Second child\n"
+    "- [ ] Next\n"
+    "- [x] Previously finished\n"
+)
+FILE.write_text(completion_start)
+time.sleep(1.5)
+ev("document.querySelectorAll('.check')[1].click()")
+check(
+    "a completed subtask moves below its siblings with its children",
+    lines()[:4] == ["- [ ] ==🟢Parent==", "  - [ ] Second child", "  - [x] First child", "    - [ ] Grandchild"],
+)
+key("z", CTRL)
+check("undo restores the subtask and its entire branch", file() == completion_start)
+ev("document.querySelector('.check').click()")
+check(
+    "a completed parent moves to the very bottom with its subtasks",
+    lines() == ["- [ ] Next", "- [x] Previously finished", "- [x] ==🟢Parent==", "  - [ ] First child", "    - [ ] Grandchild", "  - [ ] Second child"],
+)
+call("Page.reload")
+time.sleep(1)
+check("the completed order survives a reload", ev(titles) == ["Next", "Previously finished", "Parent", "First child", "Grandchild", "Second child"])
+ev("document.querySelectorAll('.check')[2].click()")
+check("reopening a task puts it above completed tasks", lines()[:2] == ["- [ ] Next", "- [ ] ==🟢Parent=="])
+ev("document.activeElement.blur()")
+FILE.write_text("- [x] Existing done\n- [ ] Active parent\n  - [x] Done subtask\n  - [ ] Active subtask\n- [ ] Next active\n")
+time.sleep(1.5)
+check(
+    "existing completed tasks are also moved below active siblings",
+    lines() == ["- [ ] Active parent", "  - [ ] Active subtask", "  - [x] Done subtask", "- [ ] Next active", "- [x] Existing done"],
+)
 print("ALL PASS" if ok else "SOME FAILED")
 if not ok:
     sys.exit(1)

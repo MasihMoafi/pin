@@ -1,6 +1,6 @@
 // Pin's page. The tree lives in `board`; every change goes through change(), which saves the file and records one
 // undo step (typing is grouped into one step per pause).
-import { type Board, type Color, type Item, type Named, COLORS, parse, serialize } from './board.js';
+import { type Board, type Color, type Item, type Named, COLORS, completedLast, parse, serialize } from './board.js';
 import { icon, type IconName } from './icons.js';
 
 const EDGE: Record<Named, string> = { '🟢': '#2f9e5b', '🔵': '#2f6fbe', '🟣': '#7e57c2', '🟠': '#e07b16', '🟡': '#d4a800', '🔴': '#d23b3b' };
@@ -148,8 +148,10 @@ function loadDisk(version: string | null): void {
   if (typing) clearTimeout(typing); typing = null;
   disk = version; conflict = undefined; storageError = null;
   board = parse(version ?? ''); clean = serialize(board);
+  completedLast(board.items);
   undoStack.length = 0; redoStack.length = 0;
   closeMenu(); render(); shown = snapshot(); notice();
+  if (serialize(board) !== clean) write();
 }
 function receiveDisk(version: string | null): void {
   if (disk === undefined) return;
@@ -198,7 +200,7 @@ function record(): void {
 /** Apply a structural change: save, redraw, put the caret back, then record an undo step. */
 function change(fn: () => void, focus?: { item: Item; caret?: number } | null): void {
   if (typing) record();
-  fn(); write(); render();
+  fn(); completedLast(board.items); write(); render();
   if (focus) focusItem(focus.item, focus.caret);
   record();
 }
@@ -209,6 +211,16 @@ function restore(state: Snapshot): void {
 }
 function undo(): void { if (typing) record(); const s = undoStack.pop(); if (!s) return; redoStack.push(snapshot()); restore(s); }
 function redo(): void { const s = redoStack.pop(); if (!s) return; undoStack.push(snapshot()); restore(s); }
+
+function toggleDone(item: Item, focus?: { item: Item; caret?: number }): void {
+  change(() => {
+    item.done = !item.done;
+    if (item.done) {
+      const p = siblings(item);
+      p.splice(p.indexOf(item), 1); p.push(item);
+    }
+  }, focus);
+}
 
 // ---------- drawing ----------
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = ''): HTMLElementTagNameMap[K] {
@@ -230,7 +242,7 @@ function node(item: Item): HTMLLIElement {
   row.ondragend = () => { row.draggable = false; };
 
   const check = el('input', 'check'); check.type = 'checkbox'; check.checked = item.done;
-  check.onchange = () => change(() => { item.done = check.checked; });
+  check.onchange = () => toggleDone(item);
 
   const title = el('div', 'title'); title.contentEditable = 'true'; title.spellcheck = false;
   title.textContent = item.text; itemOf.set(title, item);
@@ -304,7 +316,7 @@ function keys(e: KeyboardEvent, item: Item, title: HTMLElement): void {
     e.preventDefault(); const all = flat(); const before = all[all.indexOf(item) - 1];
     remove(item, before ? { item: before } : null);
   }
-  else if (mod && e.key === 'Enter') { e.preventDefault(); change(() => { item.done = !item.done; }, { item, caret }); }
+  else if (mod && e.key === 'Enter') { e.preventDefault(); toggleDone(item, { item, caret }); }
   else if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault(); const n = blank(item.color, text.slice(caret));
     change(() => { item.text = text.slice(0, caret); p.splice(i + 1, 0, n); }, { item: n, caret: 0 });
