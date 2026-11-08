@@ -1,0 +1,14 @@
+kind = "app"
+name = "Pin"
+categories = ["Office", "TextEditor"]
+icon = "logo/pin.svg"
+screenshots = ["assets/screenshot.png"]
+terminal = false
+
+[linux.x86_64]
+asset = "Pin-{version}.AppImage"
+
+# Prevent the architecture-neutral AppImage name being selected on ARM.
+# Replace this pattern when an ARM release exists.
+[linux.aarch64]
+asset = "Pin-{version}-aarch64.AppImage"
