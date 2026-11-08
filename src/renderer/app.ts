@@ -54,7 +54,28 @@ function ownerOf(arr: Item[], items: Item[] = board.items, owner: Item | null = 
   for (const it of items) { const o = ownerOf(arr, it.children, it); if (o !== undefined) return o; }
   return undefined;
 }
-function flat(items: Item[] = board.items, out: Item[] = []): Item[] { for (const it of items) { out.push(it); flat(it.children, out); } return out; }
+/** The tasks on screen, in order: a folded task's subtasks are skipped (arrow keys move through what is shown). */
+function flat(items: Item[] = board.items, out: Item[] = []): Item[] { for (const it of items) { out.push(it); if (!isFolded(it)) flat(it.children, out); } return out; }
+
+// ---------- folding (8 Nov: "it doesn't have a collapse option for subtasks") ----------
+// A task's place is its text and its parents' texts; the folded ones are remembered on this computer, not in the file.
+const FOLDED = 'pin:folded';
+const folded = new Set<string>(JSON.parse(localStorage.getItem(FOLDED) ?? '[]') as string[]);
+function foldKey(item: Item): string {
+  const path = pathOf(item); if (!path) return item.text;
+  const texts: string[] = []; let items = board.items;
+  for (const i of path) { const it = items[i]!; texts.push(it.text); items = it.children; }
+  return texts.join('\u0000');
+}
+function isFolded(item: Item): boolean { return item.children.length > 0 && folded.has(foldKey(item)); }
+function setFolded(item: Item, fold: boolean): void {
+  const key = foldKey(item); if (fold) folded.add(key); else folded.delete(key);
+  localStorage.setItem(FOLDED, JSON.stringify([...folded]));
+}
+function toggleFold(item: Item): void {
+  const focus = focusState(); setFolded(item, !isFolded(item)); render();
+  const it = focus && itemAt(focus.path); if (it && elOf.has(it)) focusItem(it, focus.caret); else focusItem(item);
+}
 function pathOf(item: Item, items: Item[] = board.items, path: number[] = []): number[] | null {
   for (let i = 0; i < items.length; i++) {
     if (items[i] === item) return [...path, i];
@@ -175,6 +196,14 @@ function node(item: Item): HTMLLIElement {
   more.onclick = () => rowMenu(more, item);
   const hover = el('span', 'actions-hover'); hover.append(addsub, del, more);
   row.append(check, dot, title, when, handle, hover);
+  if (item.children.length) {
+    const shut = isFolded(item), n = item.children.length;
+    const fold = el('button', 'fold' + (shut ? '' : ' open')); fold.innerHTML = icon('chevron-right', 16);
+    fold.title = shut ? `Show ${n} subtask${n === 1 ? '' : 's'}` : 'Hide subtasks';
+    fold.setAttribute('aria-expanded', String(!shut));
+    fold.onclick = () => toggleFold(item);
+    row.append(fold);
+  }
 
   row.ondragstart = (e) => { dragged = item; if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); };
   row.ondragover = (e) => {
@@ -194,7 +223,7 @@ function node(item: Item): HTMLLIElement {
     });
   };
   li.append(row);
-  if (item.children.length) { const ul = el('ul'); ul.append(...item.children.map(node)); li.append(ul); }
+  if (item.children.length && !isFolded(item)) { const ul = el('ul'); ul.append(...item.children.map(node)); li.append(ul); }
   return li;
 }
 
@@ -203,6 +232,7 @@ function keys(e: KeyboardEvent, item: Item, title: HTMLElement): void {
   const p = siblings(item); const i = p.indexOf(item); const caret = caretOf(title); const text = title.textContent ?? '';
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 't') { e.preventDefault(); addSubtask(item); }
+  else if (mod && e.key === '.') { e.preventDefault(); if (item.children.length) toggleFold(item); }
   else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); dateMenu(elOf.get(item) ?? title, item); }
   else if (mod && e.shiftKey && e.key === 'Backspace') {
     e.preventDefault(); const all = flat(); const before = all[all.indexOf(item) - 1];
@@ -215,7 +245,8 @@ function keys(e: KeyboardEvent, item: Item, title: HTMLElement): void {
   }
   else if (e.key === 'Tab' && !e.shiftKey) {
     e.preventDefault(); if (i === 0) return;
-    change(() => { p.splice(i, 1); p[i - 1].children.push(item); }, { item, caret });
+    const parent = p[i - 1]; if (isFolded(parent)) setFolded(parent, false);
+    change(() => { p.splice(i, 1); parent.children.push(item); }, { item, caret });
   }
   else if (e.key === 'Tab' && e.shiftKey) {
     e.preventDefault(); const owner = ownerOf(p); if (!owner) return;
@@ -260,7 +291,11 @@ function button(label: string, fn: () => void, cls = '', ic?: IconName): HTMLBut
   b.onclick = fn; return b;
 }
 
-function addSubtask(item: Item): void { const n = blank(item.color); change(() => { item.children.push(n); }, { item: n }); }
+/** A new subtask goes first under its task (8 Nov: they were added at the bottom), and a folded task opens to show it. */
+function addSubtask(item: Item): void {
+  if (isFolded(item)) setFolded(item, false);
+  const n = blank(item.color); change(() => { item.children.unshift(n); }, { item: n });
+}
 function swatches(item: Item): HTMLDivElement {
   const sw = el('div', 'swatches');
   const pick = (c: Color): void => { closeMenu(); change(() => { item.color = c; }); };
@@ -283,6 +318,7 @@ function rowMenu(anchor: HTMLElement, item: Item): void {
     m.append(label, swatches(item), el('hr'));
     m.append(button(item.date ? 'Change date (Ctrl+D)' : 'Add date (Ctrl+D)', () => dateMenu(anchor, item), '', 'calendar'));
     m.append(button('Add subtask (Ctrl+T)', () => { closeMenu(); addSubtask(item); }, '', 'list-plus'));
+    if (item.children.length) m.append(button(isFolded(item) ? 'Show subtasks (Ctrl+.)' : 'Hide subtasks (Ctrl+.)', () => { closeMenu(); toggleFold(item); }, '', 'chevron-right'));
     m.append(el('hr'));
     m.append(button('Delete (Ctrl+Shift+Backspace)', () => { closeMenu(); remove(item); }, '', 'trash-2'));
   });

@@ -259,4 +259,29 @@ check(
         "!document.getElementById('menu').hidden && !!document.querySelector('#menu input[type=date]')"
     ),
 )
+# subtasks: a new one goes on top; a task folds its subtasks away and stays folded (8 Nov)
+ev("document.getElementById('menu').hidden = true; document.activeElement.blur()")
+FILE.write_text("- [ ] ==🟢Parent==\n  - [ ] ==🟢Old child==\n- [ ] ==🔵Next==\n")
+time.sleep(2.5)
+ev("document.querySelectorAll('.addsub')[0].click()")
+time.sleep(0.6)
+check(
+    "a new subtask goes on top",
+    lines()[1].startswith("  - [ ] ==🟢==") and "Old child" in lines()[2],
+)
+key("z", CTRL)
+titles = "[...document.querySelectorAll('.title')].map(t=>t.textContent)"
+ev("document.querySelector('.fold').click()")
+time.sleep(0.4)
+check(
+    "the fold arrow hides the subtasks",
+    "Old child" not in ev(titles) and "Next" in ev(titles),
+)
+check("folding leaves the file alone", "  - [ ] ==🟢Old child==" in file())
+call("Page.reload")
+time.sleep(2.5)
+check("a folded task stays folded after a restart", "Old child" not in ev(titles))
+ev("document.querySelector('.fold').click()")
+time.sleep(0.4)
+check("the fold arrow shows them again", "Old child" in ev(titles))
 print("ALL PASS" if ok else "SOME FAILED")

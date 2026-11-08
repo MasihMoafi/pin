@@ -16,6 +16,8 @@ this file lists only what is particular to Pin. Code is TypeScript (`src/`), bui
 
 ## Tasks
 - Each row on hover: + (subtask), trash (delete), ⋯ (color, date, subtask, delete).
+- A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
+  away (also Ctrl+. and the ⋯ menu); the folded tasks are remembered on this computer, never written to the file.
 - Hotkeys: Ctrl+T subtask, Ctrl+D date, Ctrl+Shift+Backspace delete, Ctrl+Enter done, Alt+↑/↓ move;
   Enter splits at the caret; Tab / Shift+Tab nest and lift; Backspace on an empty task deletes it.
 - The color dot opens twelve colors plus any custom color. A new task takes its neighbor's color.

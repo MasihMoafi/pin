@@ -23,7 +23,7 @@ header .icon { width: 30px; display: grid; place-items: center; }
 header .pin.on { color: var(--ink); }
 header .pin.on svg { fill: currentColor; }
 
-main { flex: 1; overflow: auto; padding: 8px 8px 24px; scrollbar-gutter: stable; }
+main { flex: 1; overflow: auto; padding: 8px 8px 24px 20px; scrollbar-gutter: stable; }
 /* A thin, quiet scrollbar instead of the system's gray bar with arrows. */
 main::-webkit-scrollbar { width: 8px; }
 main::-webkit-scrollbar-button { display: none; }
@@ -52,6 +52,10 @@ main::-webkit-scrollbar-thumb:hover { background-color: #00000040; }
 .del:hover { color: #b3261e; }
 .handle { position: absolute; left: -2px; top: 7px; width: 14px; height: 20px; color: #9f987f; cursor: grab; user-select: none; display: grid; place-items: center; visibility: hidden; }
 .row:hover .handle { visibility: visible; }
+/* Folding: a chevron in the gutter left of a task that has subtasks, pointing down while they show. */
+.fold { position: absolute; left: -19px; top: 7px; width: 18px; height: 20px; padding: 0; display: grid; place-items: center; color: var(--mute); }
+.fold svg { transition: transform .12s; }
+.fold.open svg { transform: rotate(90deg); }
 .check { width: 16px; height: 16px; margin: 2px 0 0; accent-color: #2f9e5b; cursor: pointer; }
 .title { outline: none; min-height: 20px; word-break: break-word; padding: 0 2px; border-radius: 4px; }
 .title:focus { background: #ffffff8c; box-shadow: 0 0 0 1px #0000001f; }
