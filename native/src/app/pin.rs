@@ -18,6 +18,10 @@ use std::{
 
 const LIST: &str = "pin-list";
 const OPTIONS: &str = "pin-options";
+const TEXT_SIZE: f32 = 15.;
+const LINE_HEIGHT: f32 = 24.5;
+const EDITOR_PADDING: f32 = 3.;
+const CONTROL_HEIGHT: f32 = LINE_HEIGHT + 2. * EDITOR_PADDING;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
@@ -831,7 +835,7 @@ impl State {
                 .into_iter()
                 .map(|(i, t)| (t.id, self.task_view(i, t))),
         )
-        .spacing(3);
+        .spacing(8);
         let mut body = column![items].spacing(4).padding([12, 11]);
         if self.board.tasks.is_empty() {
             body = body.push(
@@ -853,6 +857,12 @@ impl State {
         body = body.push(footer);
         scrollable(body)
             .id(LIST)
+            .direction(scrollable::Direction::Vertical(
+                scrollable::Scrollbar::new()
+                    .width(6)
+                    .scroller_width(6)
+                    .margin(8),
+            ))
             .on_scroll(Message::Scroll)
             .height(Fill)
             .into()
@@ -882,9 +892,9 @@ impl State {
             .id(Target::Item(id).id())
             .on_action(move |a| Message::Edit(Target::Item(id), a))
             .height(Length::Shrink)
-            .padding([3, 0])
-            .size(15)
-            .line_height(iced::widget::text::LineHeight::Relative(24.5 / 15.))
+            .padding([EDITOR_PADDING, 0.])
+            .size(TEXT_SIZE)
+            .line_height(iced::widget::text::LineHeight::Absolute(LINE_HEIGHT.into()))
             .wrapping(iced::widget::text::Wrapping::Word)
             .placeholder("New priority")
             .style(move |theme, _| text_editor::Style {
@@ -969,18 +979,28 @@ impl State {
                 }
             });
         let row = row![
-            chevron,
-            container(check).padding([6, 0]),
+            container(chevron)
+                .height(CONTROL_HEIGHT)
+                .align_y(iced::Center),
+            container(check)
+                .height(CONTROL_HEIGHT)
+                .align_y(iced::Center)
+                .padding(iced::Padding {
+                    right: 5.,
+                    ..Default::default()
+                }),
             container(content).width(Fill),
-            grip,
-            options
+            container(grip).height(CONTROL_HEIGHT).align_y(iced::Center),
+            container(options)
+                .height(CONTROL_HEIGHT)
+                .align_y(iced::Center)
         ]
         .spacing(5)
         .padding(iced::Padding {
             top: 4.,
             bottom: 6.,
             left: (t.depth.min(6) * 16) as f32,
-            right: 4.,
+            right: 12.,
         })
         .align_y(iced::Top);
         let indicator = self.drop == Some((id, false));

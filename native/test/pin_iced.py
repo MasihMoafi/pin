@@ -23,6 +23,7 @@ scale = int(os.environ.get('ICED_TEST_SCALE', '1'))
 env = dict(os.environ, GDK_BACKEND='x11', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), WEBKIT_DISABLE_COMPOSITING_MODE='1', LIBGL_ALWAYS_SOFTWARE='1', GSETTINGS_BACKEND='keyfile')
 children, checks = [], []
 resize_edges=runpy.run_path(str(Path(__file__).with_name("window_checks.py")))["resize"]
+row_checks=runpy.run_path(str(Path(__file__).with_name("row_checks.py")))
 today = date.today().isoformat()
 initial = 'Intro stays here.\n\n- [ ] ==🟢First priority==\n  - [ ] ==🔵Child task==\n- [ ] ==🟣Second priority==\n- [x] ==🟠Previously done==\n'
 long_text = 'Read one long research paper and take careful notes about the training process, model behavior and the evaluation harness.'
@@ -389,11 +390,15 @@ try:
         p,wid,file,_=start('contrast-'+theme,palette,theme=theme)
         picture=shot('pin-checkboxes-'+theme).convert('RGB')
         face=(25,25,28) if theme=='Dark' else (252,252,252)
-        for i in range(5):
-            top=round((67+i*47.5)*scale)
-            crop=picture.crop((42*scale,top,59*scale,top+17*scale))
+        boxes=row_checks['checkboxes'](picture,scale,theme=='Dark')
+        assert len(boxes)==5,boxes
+        layout=row_checks['alignment'](picture,scale,boxes,theme=='Dark')
+        (out/('row-layout-'+theme+'.json')).write_text(json.dumps(layout,indent=2)+'\n')
+        for i,box in enumerate(boxes):
+            left,top,right,bottom=box
+            crop=picture.crop(box)
             colors=Counter(crop.getdata())
-            row_color=picture.getpixel((62*scale,top+8*scale))
+            row_color=picture.getpixel((right+2*scale,(top+bottom)//2))
             outline=max((rgb for rgb,count in colors.most_common(8)),key=lambda rgb:contrast(rgb,row_color))
             ratio=contrast(outline,row_color)
             record={'theme':theme,'row':i,'outline':outline,'background':row_color,'contrast':round(ratio,2)}

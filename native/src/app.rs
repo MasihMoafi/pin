@@ -1242,12 +1242,12 @@ fn resize_handle(direction: window::Direction) -> Element<'static, Message> {
             .width(if horizontal {
                 Length::Fill
             } else {
-                Length::Fixed(if vertical { 4. } else { 7. })
+                Length::Fixed(if vertical { 8. } else { 16. })
             })
             .height(if vertical {
                 Length::Fill
             } else {
-                Length::Fixed(if horizontal { 4. } else { 7. })
+                Length::Fixed(if horizontal { 8. } else { 16. })
             }),
     )
     .on_press(Message::Resize(direction))
