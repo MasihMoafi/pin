@@ -11,6 +11,7 @@ from collections import Counter
 import math
 import os
 from pathlib import Path
+import runpy
 import signal
 import subprocess
 import sys
@@ -135,13 +136,18 @@ def checkboxes(pid):
 def native_checkboxes(wid):
     g = geometry(wid)
     theme = os.environ.get('ICED_THEME', 'Light')
-    picture = Image.open(screenshot('native-checkboxes-' + theme)).convert('RGB')
+    picture = Image.open(screenshot('native-checkboxes-' + theme)).convert('RGB').crop(
+        (g['X'], g['Y'], g['X'] + g['WIDTH'], g['Y'] + g['HEIGHT']))
+    row_checks = runpy.run_path(str(Path(__file__).with_name('row_checks.py')))
+    boxes = row_checks['checkboxes'](picture, scale, theme == 'Dark')
+    assert len(boxes) == 5, boxes
+    layout = row_checks['alignment'](picture, scale, boxes, theme == 'Dark')
+    (output / 'row-layout.json').write_text(json.dumps(layout, indent=2) + '\n')
     evidence = []
-    for i in range(5):
-        left = g['X'] + 42 * scale
-        top = g['Y'] + round((67 + i * 47.5) * scale)
-        crop = picture.crop((left, top, left + 17 * scale, top + 17 * scale))
-        row = picture.getpixel((g['X'] + 62 * scale, top + 8 * scale))
+    for i, box in enumerate(boxes):
+        left, top, right, bottom = box
+        crop = picture.crop(box)
+        row = picture.getpixel((right + 2 * scale, (top + bottom) // 2))
         colors = Counter(crop.getdata())
         outline = max((rgb for rgb, count in colors.most_common(8)), key=lambda rgb: contrast(rgb, row))
         ratio = contrast(outline, row)
@@ -151,7 +157,8 @@ def native_checkboxes(wid):
         assert colors[face] >= crop.width * crop.height * .4, evidence[-1]
     (output / 'checkboxes.json').write_text(json.dumps(evidence, indent=2) + '\n')
     baseline = (root / 'Pin.md').read_text()
-    move(g['X'] + 50.5 * scale, g['Y'] + 75.5 * scale)
+    left, top, right, bottom = boxes[0]
+    move(g['X'] + (left + right) / 2, g['Y'] + (top + bottom) / 2)
     input_event('NotifyPointerButton', '(ib)', (272, True))
     input_event('NotifyPointerButton', '(ib)', (272, False))
     time.sleep(.6)
