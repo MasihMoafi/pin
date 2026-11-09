@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
 """Install a verified native binary and both menu entries for this user."""
 import os
+import argparse
 from pathlib import Path
 import shlex
 import shutil
-import sys
 
-source = Path(sys.argv[1]).resolve()
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('binary', type=Path)
+parser.add_argument('--notes-iced', action='store_true', help='Install native Notes and keep Pin unchanged.')
+args = parser.parse_args()
+source = args.binary.resolve()
 if not source.is_file():
     raise SystemExit("Pass the built pin-native executable.")
 home = Path.home()
 data = Path(os.environ.get("XDG_DATA_HOME", home / ".local/share"))
 config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
-binary = home / ".local/lib/pin-native/pin-native"
+binary = home / ".local/lib/pin-native" / ('notes-iced' if args.notes_iced else 'pin-native')
 binary.parent.mkdir(parents=True, exist_ok=True)
 staged = binary.with_suffix(".install")
 shutil.copyfile(source, staged)
 staged.chmod(0o755)
 staged.replace(binary)
 
-for name, notes in [("pin-native", False), ("sticky-notes", True)]:
+for name, notes in ([("sticky-notes", True)] if args.notes_iced else [("pin-native", False), ("sticky-notes", True)]):
     launcher = home / ".local/bin" / name
     launcher.parent.mkdir(parents=True, exist_ok=True)
-    launcher.write_text("#!/bin/sh\nexec env GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 "
-                        + shlex.quote(str(binary)) + (" --notes" if notes else "") + ' "$@"\n')
+    launch = ('exec ' if args.notes_iced else 'exec env GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 ')
+    launcher.write_text("#!/bin/sh\n" + launch + shlex.quote(str(binary))
+                        + (" --notes" if notes and not args.notes_iced else "") + ' "$@"\n')
     launcher.chmod(0o755)
     desktop = ("[Desktop Entry]\nType=Application\n"
                f"Name={'Sticky Notes' if notes else 'Pin'}\n"
@@ -43,4 +48,4 @@ icons.mkdir(parents=True, exist_ok=True)
 for name, filename in [("pin", "pin-256.png"), ("sticky-notes", "notes-256.png")]:
     shutil.copyfile(Path(__file__).resolve().parent.parent / "logo" / filename, icons / (name + ".png"))
 
-print("Installed Pin and Sticky Notes.")
+print("Installed native Sticky Notes." if args.notes_iced else "Installed Pin and Sticky Notes.")

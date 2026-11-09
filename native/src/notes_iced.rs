@@ -1,4 +1,4 @@
-//! Native Notes feasibility build; not used by the installed launchers.
+//! Native scratch pad using Iced widgets and tiny-skia software rendering.
 use iced::keyboard::key::{Code, Physical};
 use iced::widget::{
     button, column, container, mouse_area, operation, row, space, stack, svg, text, text_editor,
@@ -45,6 +45,7 @@ enum Message {
     Minimize,
     Close,
     Window(window::Id, window::Event),
+    Placement(window::Id, Point, bool, f32, Option<Size>),
     Drag,
     Resize(window::Direction),
     Pointer(Point),
@@ -93,13 +94,15 @@ struct Notes {
     menu_focus: usize,
     pointer: Point,
     context: Option<Point>,
+    initial_position: Option<(Point, bool)>,
 }
 
 fn main() -> iced::Result {
-    // The prototype uses a separate preference file; user documents still use the existing path contract.
-    let settings_file = paths::config_root().join("StickyNotes/iced-prototype.json");
-    let bounds: Bounds = std::fs::read_to_string(&settings_file)
-        .ok()
+    let settings_file = paths::config_root().join("StickyNotes/iced.json");
+    let existing = std::fs::read_to_string(&settings_file).ok();
+    let legacy = existing.is_none();
+    let bounds: Bounds = existing
+        .or_else(|| std::fs::read_to_string(settings_file.with_file_name("native.json")).ok())
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     let file = paths::data_file(true);
@@ -124,27 +127,27 @@ fn main() -> iced::Result {
     let initial_bounds = bounds.clone();
     iced::application(
         move || {
-            (
-                Notes::new(
-                    file.clone(),
-                    settings_file.clone(),
-                    initial_bounds.clone(),
-                    disk.clone(),
-                ),
-                operation::focus(EDITOR),
-            )
+            let mut notes = Notes::new(
+                file.clone(),
+                settings_file.clone(),
+                initial_bounds.clone(),
+                disk.clone(),
+            );
+            notes.initial_position = initial_bounds
+                .x
+                .zip(initial_bounds.y)
+                .map(|(x, y)| (Point::new(x, y), legacy));
+            (notes, operation::focus(EDITOR))
         },
         Notes::update,
         Notes::view,
     )
-    .title("Sticky Notes — Iced prototype")
+    .title("Sticky Notes")
     .window(window::Settings {
         size: Size::new(width, height),
         min_size: Some(Size::new(280., 180.)),
-        position: match (bounds.x, bounds.y) {
-            (Some(x), Some(y)) => window::Position::Specific(Point::new(x, y)),
-            _ => window::Position::Centered,
-        },
+        // Resolve stored physical/logical coordinates against the real display after opening.
+        position: window::Position::Centered,
         decorations: false,
         level: if bounds.pinned.unwrap_or(true) {
             window::Level::AlwaysOnTop
@@ -154,7 +157,7 @@ fn main() -> iced::Result {
         icon,
         exit_on_close_request: false,
         platform_specific: window::settings::PlatformSpecific {
-            application_id: "sticky-notes-iced".into(),
+            application_id: "sticky-notes".into(),
             ..Default::default()
         },
         ..Default::default()
@@ -204,6 +207,7 @@ impl Notes {
             menu_focus: 0,
             pointer: Point::ORIGIN,
             context: None,
+            initial_position: None,
         };
         initial
             .content
@@ -213,7 +217,14 @@ impl Notes {
 
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            iced::time::every(Duration::from_millis(250)).map(|_| Message::Tick),
+            iced::time::every(
+                if self.save_at.is_some() || self.saved_at.is_some() || self.error.is_some() {
+                    Duration::from_millis(250)
+                } else {
+                    Duration::from_secs(2)
+                },
+            )
+            .map(|_| Message::Tick),
             event::listen_with(|event, status, id| match event {
                 Event::Window(
                     e @ (window::Event::Opened { .. }
@@ -445,7 +456,7 @@ impl Notes {
                             self.bounds.y = Some(p.y);
                         }
                         // Iced creates X11 windows hidden; apply this after mapping.
-                        return window::set_level(
+                        let level = window::set_level(
                             id,
                             if self.bounds.pinned.unwrap_or(true) {
                                 window::Level::AlwaysOnTop
@@ -453,6 +464,17 @@ impl Notes {
                                 window::Level::Normal
                             },
                         );
+                        let placement = if let Some((point, legacy)) = self.initial_position.take()
+                        {
+                            window::scale_factor(id).then(move |scale| {
+                                window::monitor_size(id).map(move |monitor| {
+                                    Message::Placement(id, point, legacy, scale, monitor)
+                                })
+                            })
+                        } else {
+                            Task::none()
+                        };
+                        return Task::batch([level, placement]);
                     }
                     window::Event::Moved(p) => {
                         self.bounds.x = Some(p.x);
@@ -465,6 +487,13 @@ impl Notes {
                     window::Event::CloseRequested => return self.update(Message::Close),
                     _ => (),
                 }
+            }
+            Message::Placement(id, point, legacy, scale, monitor) => {
+                let position = restored_position(point, legacy, scale, monitor, &self.bounds);
+                self.bounds.x = Some(position.x);
+                self.bounds.y = Some(position.y);
+                self.preferences();
+                return window::move_to(id, position);
             }
             Message::Drag => {
                 if let Some(id) = self.window {
@@ -489,11 +518,12 @@ impl Notes {
                 if self.context.is_some() {
                     self.move_menu(if reverse { -1 } else { 1 });
                 } else {
-                    for _ in 0..7 {
+                    let count = if self.conflict { 9 } else { 7 };
+                    for _ in 0..count {
                         self.focus = if reverse {
-                            (self.focus + 6) % 7
+                            (self.focus + count - 1) % count
                         } else {
-                            (self.focus + 1) % 7
+                            (self.focus + 1) % count
                         };
                         if self.focus == 0 || self.header_action(self.focus).is_some() {
                             break;
@@ -609,6 +639,8 @@ impl Notes {
                     self.conflict = false;
                     self.save_at = None;
                     self.group = None;
+                    self.focus = 0;
+                    return operation::focus(EDITOR);
                 }
             }
             Message::KeepMine => {
@@ -616,6 +648,8 @@ impl Notes {
                     self.disk = disk;
                     self.conflict = false;
                     self.save(true);
+                    self.focus = 0;
+                    return operation::focus(EDITOR);
                 }
             }
         }
@@ -629,6 +663,8 @@ impl Notes {
             4 => Some(Message::Pin),
             5 => Some(Message::Minimize),
             6 => Some(Message::Close),
+            7 => self.conflict.then_some(Message::UseDisk),
+            8 => self.conflict.then_some(Message::KeepMine),
             _ => None,
         }
     }
@@ -774,11 +810,21 @@ impl Notes {
                             button(text("Use disk").size(12))
                                 .padding([5, 10])
                                 .on_press(Message::UseDisk)
-                                .style(outline),
+                                .style(|theme, status| conflict_style(
+                                    theme,
+                                    status,
+                                    self.focus == 7,
+                                    false
+                                )),
                             button(text("Keep mine").size(12))
                                 .padding([5, 10])
                                 .on_press(Message::KeepMine)
-                                .style(primary)
+                                .style(|theme, status| conflict_style(
+                                    theme,
+                                    status,
+                                    self.focus == 8,
+                                    true
+                                ))
                         ]
                         .spacing(8)
                     ]
@@ -1043,20 +1089,45 @@ fn resize_handle(direction: window::Direction) -> Element<'static, Message> {
         .into()
 }
 
-fn primary(theme: &Theme, status: button::Status) -> button::Style {
+fn conflict_style(
+    theme: &Theme,
+    status: button::Status,
+    focused: bool,
+    primary: bool,
+) -> button::Style {
     let mut style = ghost(theme, status);
-    style.background = Some(fg(theme).into());
-    style.text_color = bg(theme);
-    style
-}
-fn outline(theme: &Theme, status: button::Status) -> button::Style {
-    let mut style = ghost(theme, status);
+    if primary {
+        style.background = Some(fg(theme).into());
+        style.text_color = bg(theme);
+    }
     style.border = Border {
-        color: line(theme),
-        width: 1.,
+        color: if focused { muted(theme) } else { line(theme) },
+        width: if focused { 2. } else { 1. },
         radius: 5.into(),
     };
     style
+}
+
+fn restored_position(
+    point: Point,
+    legacy: bool,
+    scale: f32,
+    monitor: Option<Size>,
+    bounds: &Bounds,
+) -> Point {
+    let point = if legacy {
+        Point::new(point.x / scale.max(1.), point.y / scale.max(1.))
+    } else {
+        point
+    };
+    if let Some(monitor) = monitor {
+        Point::new(
+            point.x.clamp(0., (monitor.width - bounds.width).max(0.)),
+            point.y.clamp(0., (monitor.height - bounds.height).max(0.)),
+        )
+    } else {
+        point
+    }
 }
 
 #[cfg(test)]
@@ -1125,6 +1196,40 @@ mod tests {
         }
         let _ = n.update(Message::FocusTab(true));
         assert_eq!(n.focus, 6);
+        n.conflict = true;
+        for expected in [7, 8, 0] {
+            let _ = n.update(Message::FocusTab(false));
+            assert_eq!(n.focus, expected);
+        }
+    }
+
+    #[test]
+    fn legacy_physical_position_migrates_to_visible_logical_bounds() {
+        let bounds = Bounds {
+            width: 430.,
+            height: 320.,
+            ..Bounds::default()
+        };
+        assert_eq!(
+            restored_position(
+                Point::new(1920., 248.),
+                true,
+                2.,
+                Some(Size::new(2048., 1152.)),
+                &bounds
+            ),
+            Point::new(960., 124.)
+        );
+        assert_eq!(
+            restored_position(
+                Point::new(9999., -100.),
+                false,
+                1.,
+                Some(Size::new(800., 600.)),
+                &bounds
+            ),
+            Point::new(370., 0.)
+        );
     }
 
     #[test]

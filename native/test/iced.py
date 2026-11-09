@@ -64,7 +64,7 @@ def start(kind, label, reuse=False, theme=None, contents=initial):
     file = case / 'Notes.txt'
     if not reuse:
         file.write_text(contents)
-    for prefs in ([] if reuse else ['native.json', 'iced-prototype.json']):
+    for prefs in ([] if reuse else ['native.json', 'iced.json']):
         (config / prefs).write_text(json.dumps({'width': 430, 'height': 320, 'x': 40, 'y': 60, 'pinned': True}))
     env = dict(base_env, XDG_CONFIG_HOME=str(case / 'config'), STICKY_NOTES_FILE=str(file))
     if theme is not None:
@@ -301,7 +301,26 @@ try:
     x('type', '--clearmodifiers', '--delay', 5, 'Loaded')
     saved(file, 'Disk version\nLoaded')
     check('Concurrent disk edits keep local text and both conflict choices work')
+    # The conflict actions are also reachable without a mouse.
+    x('key', 'ctrl+End')
+    x('type', '--clearmodifiers', '--delay', 1, ' local')
+    file.write_text('Keyboard disk version\n')
+    time.sleep(.9)
+    x('key', 'shift+Tab', 'Return')
+    saved(file, 'Disk version\nLoaded local')
+    check('Tab and Enter can resolve a file conflict')
     close(p, wid)
+    migration = root / 'migration'
+    config = migration / 'config/StickyNotes'
+    config.mkdir(parents=True)
+    (config / 'native.json').write_text(json.dumps({'width': 430, 'height': 320, 'x': 40 * scale, 'y': 60 * scale, 'pinned': False}))
+    (migration / 'Notes.txt').write_text(initial)
+    p, wid, file, _ = start('iced', 'migration', reuse=True)
+    assert geometry(wid)['X'] == 40 * scale and geometry(wid)['Y'] == 60 * scale, geometry(wid)
+    assert (config / 'iced.json').is_file()
+    saved(file, initial)
+    close(p, wid)
+    check('Existing Notes text and scaled window preferences migrate without changing Pin')
     p, wid, file, _ = start('iced', 'dark', theme='Dark')
     shot('iced-notes-dark')
     bounds = geometry(wid)
