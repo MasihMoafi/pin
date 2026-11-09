@@ -311,6 +311,7 @@ pub fn run() {
                     .inner_size(width, height)
                     .min_inner_size(280., 180.)
                     .decorations(false)
+                    .transparent(true)
                     .resizable(true)
                     .always_on_top(settings.pinned.unwrap_or(true))
                     .visible(true)

@@ -58,9 +58,11 @@ def move(px, py):
     position[:] = [px, py]
 
 
-def screenshot(name):
+def screenshot(name, window=False):
     path = output / (name + '.png')
-    success, _ = bus.call_sync('org.gnome.Shell.Screenshot', '/org/gnome/Shell/Screenshot', 'org.gnome.Shell.Screenshot', 'Screenshot', GLib.Variant('(bbs)', (False, False, str(path))), None, 0, 5000, None).unpack()
+    method = 'ScreenshotWindow' if window else 'Screenshot'
+    args = GLib.Variant('(bbbs)', (False, False, False, str(path))) if window else GLib.Variant('(bbs)', (False, False, str(path)))
+    success, _ = bus.call_sync('org.gnome.Shell.Screenshot', '/org/gnome/Shell/Screenshot', 'org.gnome.Shell.Screenshot', method, args, None, 0, 5000, None).unpack()
     assert success, 'Compositor screenshot failed'
     return path
 
@@ -122,13 +124,11 @@ def checkboxes(pid):
     print('PASS: checkbox contrast on five row colors in both themes, click, save and undo', flush=True)
 
 
-def black_strip(path, before, after):
-    # The window can change size during capture. Include both bounds so a new
-    # unpainted edge cannot be hidden by taking only their intersection.
-    g = before
-    width = max(before['WIDTH'], after['WIDTH'])
-    height = max(before['HEIGHT'], after['HEIGHT'])
-    image = Image.open(path).convert('RGB').crop((g['X'] + 3, g['Y'] + 3, g['X'] + width - 3, g['Y'] + height - 3))
+def black_strip(path):
+    # Capture the window and its bounds atomically in the compositor. Separate
+    # geometry queries can include desktop pixels while the edge is moving.
+    image = Image.open(path).convert('RGB')
+    image = image.crop((3, 3, image.width - 3, image.height - 3))
     pixels = image.load()
     rows = sum(sum(max(pixels[x, y]) < 12 for x in range(image.width)) > image.width * .8 for y in range(image.height))
     columns = sum(sum(max(pixels[x, y]) < 12 for y in range(image.height)) > image.height * .8 for x in range(image.width))
@@ -188,9 +188,9 @@ try:
             try:
                 for frame in range(8):
                     before = geometry(wid)
-                    path = screenshot(f'{kind}-{axis}-{frame:02}')
+                    path = screenshot(f'{kind}-{axis}-{frame:02}', window=True)
                     after = geometry(wid)
-                    strip = black_strip(path, before, after)
+                    strip = black_strip(path)
                     records.append({'app': kind, 'axis': axis, 'frame': frame, 'black_strip_pixels': strip, 'before': before, 'after': after})
             finally:
                 stop.set()
