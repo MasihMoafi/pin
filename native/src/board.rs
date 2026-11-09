@@ -17,7 +17,7 @@ pub const COLORS: [(&str, &str); 12] = [
     ("#64748b", "#64748b"),
 ];
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Task {
     pub id: u64,
     pub depth: usize,
@@ -44,7 +44,7 @@ impl Task {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Board {
     pub preamble: String,
     pub tasks: Vec<Task>,

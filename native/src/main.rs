@@ -1,5 +1,5 @@
-mod desktop;
+mod shell;
 
-fn main() -> gtk::glib::ExitCode {
-    desktop::run()
+fn main() {
+    shell::run();
 }
