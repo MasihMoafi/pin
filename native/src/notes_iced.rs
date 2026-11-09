@@ -153,7 +153,7 @@ fn main() -> iced::Result {
     })
     .theme(|_: &Notes| {
         Theme::custom(
-            "Pin".into(),
+            "Pin",
             iced::theme::Palette {
                 background: BG,
                 text: FG,
@@ -217,7 +217,12 @@ impl Notes {
         Subscription::batch([
             iced::time::every(Duration::from_millis(250)).map(|_| Message::Tick),
             event::listen_with(|event, status, id| match event {
-                Event::Window(e) => Some(Message::Window(id, e)),
+                Event::Window(
+                    e @ (window::Event::Opened { .. }
+                    | window::Event::Moved(_)
+                    | window::Event::Resized(_)
+                    | window::Event::CloseRequested),
+                ) => Some(Message::Window(id, e)),
                 Event::Mouse(mouse::Event::CursorMoved { position }) => {
                     Some(Message::Pointer(position))
                 }

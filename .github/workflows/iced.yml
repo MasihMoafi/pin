@@ -20,6 +20,7 @@ jobs:
         with:
           workspaces: native
           key: iced-software
+          cache-on-failure: true
       - run: cargo test --manifest-path native/Cargo.toml --no-default-features --features iced-ui
       - run: cargo clippy --manifest-path native/Cargo.toml --no-default-features --features iced-ui --all-targets -- -D warnings
       - run: cargo build --manifest-path native/Cargo.toml --no-default-features --features iced-ui --bin notes-iced --release
@@ -28,6 +29,23 @@ jobs:
           name: notes-iced-linux
           path: native/target/release/notes-iced
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: notes-iced-lock
           path: native/Cargo.lock
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb openbox xdotool x11-utils xclip python3-pil fonts-inter fonts-noto-core libwebkit2gtk-4.1-0 libgtk-3-0
+      - name: Download the verified WebView baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 42611779863 -n pin-native-linux -D baseline
+      - name: Compare real Notes windows on a hidden display
+        run: |
+          Xvfb :99 -screen 0 1600x1000x24 -nolisten tcp &
+          export DISPLAY=:99
+          openbox &
+          dbus-run-session -- /usr/bin/python3 -I native/test/iced.py baseline/pin-native native/target/release/notes-iced iced-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iced-notes-evidence
+          path: iced-results
