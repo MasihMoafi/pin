@@ -21,7 +21,7 @@ struct Attributes {
     cursor: c_ulong,
 }
 
-#[link(name = "X11")]
+#[link(name = "libX11.so.6", kind = "dylib", modifiers = "+verbatim")]
 unsafe extern "C" {
     fn XChangeWindowAttributes(
         display: *mut c_void,

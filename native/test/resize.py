@@ -6,6 +6,7 @@ Arguments: PIN_BINARY NOTES_BINARY OUTPUT. RESIZE_TEST_SCALE defaults to 1.
 The compositor must not be the user's active desktop.
 """
 import json
+from collections import Counter
 import math
 import os
 from pathlib import Path
@@ -16,7 +17,9 @@ import tempfile
 import threading
 import time
 
-from gi.repository import Gio, GLib
+import gi
+gi.require_version('Atspi', '2.0')
+from gi.repository import Atspi, Gio, GLib
 from PIL import Image
 
 pin, notes = (str(Path(p).resolve()) for p in sys.argv[1:3])
@@ -25,9 +28,9 @@ output.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='resize-', dir=output))
 scale = int(os.environ.get('RESIZE_TEST_SCALE', '1'))
 assert os.environ['DISPLAY'] != ':0', 'Use an isolated desktop'
-env = dict(os.environ, GDK_BACKEND='x11', WEBKIT_DISABLE_COMPOSITING_MODE='1', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), XDG_CONFIG_HOME=str(root / 'config'), STICKY_NOTES_FILE=str(root / 'Notes.txt'), PRIORITIES_FILE=str(root / 'Pin.md'))
+env = dict(os.environ, GDK_BACKEND='x11', WEBKIT_DISABLE_COMPOSITING_MODE='1', GSETTINGS_BACKEND='keyfile', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), XDG_CONFIG_HOME=str(root / 'config'), STICKY_NOTES_FILE=str(root / 'Notes.txt'), PRIORITIES_FILE=str(root / 'Pin.md'))
 (root / 'Notes.txt').write_text('Responsibilities\n\nEach agent is responsible for something.\n')
-(root / 'Pin.md').write_text('- [ ] ==🟢A priority with a visible checkbox==\n- [ ] Another priority\n')
+(root / 'Pin.md').write_text('- [ ] ==🟢Green priority==\n- [ ] ==🟡Yellow priority==\n- [ ] <mark style="background: #ec4899;">Pink priority</mark>\n- [ ] ==🔵Blue priority==\n- [ ] Plain priority\n')
 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 # The isolated shell grants screenshots to the media-keys service.
 name = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'RequestName', GLib.Variant('(su)', ('org.gnome.SettingsDaemon.MediaKeys', 0)), None, 0, 3000, None).unpack()[0]
@@ -60,6 +63,60 @@ def screenshot(name):
     success, _ = bus.call_sync('org.gnome.Shell.Screenshot', '/org/gnome/Shell/Screenshot', 'org.gnome.Shell.Screenshot', 'Screenshot', GLib.Variant('(bbs)', (False, False, str(path))), None, 0, 5000, None).unpack()
     assert success, 'Compositor screenshot failed'
     return path
+
+
+def walk(node):
+    yield node
+    for i in range(node.get_child_count()):
+        yield from walk(node.get_child_at_index(i))
+
+
+def luminance(pixel):
+    channels = [c / 255 for c in pixel]
+    channels = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in channels]
+    return sum(c * weight for c, weight in zip(channels, [.2126, .7152, .0722]))
+
+
+def contrast(first, second):
+    values = sorted([luminance(first), luminance(second)])
+    return (values[1] + .05) / (values[0] + .05)
+
+
+def checkboxes(pid):
+    desktop = Atspi.get_desktop(0)
+    app = next(n for n in walk(desktop) if n.get_process_id() == pid)
+    checks = [n for n in walk(app) if n.get_name().startswith('Complete ')]
+    assert len(checks) == 5, ('Task checkboxes', len(checks))
+    evidence = []
+    for theme in ['default', 'prefer-dark']:
+        subprocess.run(['gsettings', 'set', 'org.gnome.desktop.interface', 'color-scheme', theme], env=env, check=True)
+        time.sleep(.8)
+        picture = Image.open(screenshot('checkboxes-' + theme)).convert('RGB')
+        for node in checks:
+            r = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+            left, top, width, height = [int(v * scale) for v in [r.x, r.y, r.width, r.height]]
+            crop = picture.crop((left, top, left + width, top + height))
+            colors = [rgb for rgb, count in Counter(crop.getdata()).most_common(2)]
+            assert len(colors) == 2, (node.get_name(), colors)
+            row = picture.getpixel((left + width + 3 * scale, top + height // 2))
+            outline = max(colors, key=lambda c: contrast(c, row))
+            ratio = contrast(outline, row)
+            evidence.append({'theme': theme, 'checkbox': node.get_name(), 'outline': outline, 'row': row, 'contrast': round(ratio, 2)})
+            assert ratio >= 3, evidence[-1]
+    subprocess.run(['gsettings', 'set', 'org.gnome.desktop.interface', 'color-scheme', 'default'], env=env, check=True)
+    (output / 'checkboxes.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    baseline = (root / 'Pin.md').read_text()
+    r = checks[0].get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+    move((r.x + r.width / 2) * scale, (r.y + r.height / 2) * scale)
+    input_event('NotifyPointerButton', '(ib)', (272, True))
+    input_event('NotifyPointerButton', '(ib)', (272, False))
+    time.sleep(.6)
+    assert '- [x] ==🟢Green priority==' in (root / 'Pin.md').read_text(), 'Checkbox click must save completion'
+    for code, pressed in [(29, True), (44, True), (44, False), (29, False)]:
+        input_event('NotifyKeyboardKeycode', '(ub)', (code, pressed))
+    time.sleep(.6)
+    assert (root / 'Pin.md').read_text() == baseline, 'Undo restores checkbox state and position'
+    print('PASS: checkbox contrast on five row colors in both themes, click, save and undo', flush=True)
 
 
 def black_strip(path, before, after):
@@ -100,6 +157,8 @@ try:
         x('windowsize', wid, 430 * scale, 360 * scale)
         x('windowactivate', '--sync', wid)
         time.sleep(.5)
+        if kind == 'pin':
+            checkboxes(process.pid)
         for axis in ['width', 'height']:
             g = geometry(wid)
             sx = g['X'] + g['WIDTH'] - 2

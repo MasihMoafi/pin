@@ -221,15 +221,18 @@ fn watch_theme(app: &tauri::AppHandle) {
 
 #[allow(deprecated)] // GDK's X11 resize background has no GTK 3 replacement.
 fn resize_background(window: &WebviewWindow, dark: bool) {
+    use gtk::glib::translate::ToGlibPtr;
     if let Ok(window) = window.gtk_window() {
         if let Some(surface) = window.window() {
             let rgb = if dark { [25., 25., 28.] } else { [252.; 3] };
-            surface.set_background_rgba(&gtk::gdk::RGBA::new(
-                rgb[0] / 255.,
-                rgb[1] / 255.,
-                rgb[2] / 255.,
-                1.,
-            ));
+            let color = gtk::gdk::RGBA::new(rgb[0] / 255., rgb[1] / 255., rgb[2] / 255., 1.);
+            // The safe GTK 3 wrapper omits this deprecated GDK window API.
+            unsafe {
+                gtk::gdk::ffi::gdk_window_set_background_rgba(
+                    surface.to_glib_none().0,
+                    color.to_glib_none().0,
+                );
+            }
         }
     }
 }

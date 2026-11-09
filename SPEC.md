@@ -28,6 +28,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 - Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
   Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
 - Each row has a checkbox, text and ⋯ (daily recurrence, color, date, subtask, delete).
+- Unchecked shadcn checkboxes keep a solid background and an outline with at least 3:1 contrast against task colors in light and dark themes.
 - A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
   away (also Ctrl+.); the folded tasks are remembered on this computer, never written to the file.
 - Hotkeys: Ctrl+T subtask, Ctrl+D date, Ctrl+Shift+Backspace delete, Ctrl+Enter done, Alt+↑/↓ move;
@@ -43,6 +44,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 Both Rust apps provide toolbar Undo, Redo and Save. Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and Ctrl+S call the same actions under English and Persian keyboard layouts. Sticky Notes is a plain text scratch pad.
 
 Drive the Rust executable with `native/test/desktop.py` on a hidden display; see `native/README.md`.
+On an isolated GNOME Wayland desktop, `native/test/resize.py PIN NOTES OUTPUT` captures continuous edge drags and checks checkbox contrast, completion and undo. Resizing must retain the painted contents without black frames or edges.
 
 Against the app on a hidden display with `--remote-debugging-port=9377`, run `python3 test/e2e.py <scratch list>`.
 Run `python3 test/sync_e2e.py <scratch list> 9377 <screenshot directory>` for conflicts, reload, theme and contrast;
