@@ -15,6 +15,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use unicode_segmentation::UnicodeSegmentation;
 
 const EDITOR: &str = "notes";
 const BG: Color = Color::from_rgb8(252, 252, 252);
@@ -366,6 +367,9 @@ impl Notes {
             }
             Message::Save => {
                 self.save(true);
+                if self.focus == 0 {
+                    return operation::focus(EDITOR);
+                }
             }
             Message::Tick => {
                 let now = Instant::now();
@@ -466,6 +470,10 @@ impl Notes {
             Message::Context(open) => {
                 self.context = if open { Some(self.pointer) } else { None };
                 self.menu_focus = (0..6).find(|&i| self.menu_action(i).is_some()).unwrap_or(4);
+                if !open {
+                    self.focus = 0;
+                    return operation::focus(EDITOR);
+                }
             }
             Message::FocusTab(reverse) => {
                 if self.context.is_some() {
@@ -504,12 +512,43 @@ impl Notes {
             Message::DeleteWord(forward) => {
                 let before = self.snapshot();
                 if self.content.selection().is_none() {
-                    self.content
-                        .perform(text_editor::Action::Select(if forward {
-                            text_editor::Motion::WordRight
-                        } else {
-                            text_editor::Motion::WordLeft
-                        }));
+                    let offset = self
+                        .content
+                        .lines()
+                        .take(before.cursor.position.line)
+                        .map(|l| l.text.len() + l.ending.as_str().len().max(1))
+                        .sum::<usize>()
+                        + before.cursor.position.column;
+                    let target = if forward {
+                        before.text[offset..]
+                            .unicode_word_indices()
+                            .next()
+                            .map_or(before.text.len(), |(i, word)| offset + i + word.len())
+                    } else {
+                        before.text[..offset]
+                            .unicode_word_indices()
+                            .next_back()
+                            .map_or(0, |(i, _)| i)
+                    };
+                    if target == offset {
+                        return Task::none();
+                    }
+                    let mut base = 0;
+                    let mut position = before.cursor.position;
+                    for (index, line) in self.content.lines().enumerate() {
+                        if target <= base + line.text.len() {
+                            position = text_editor::Position {
+                                line: index,
+                                column: target - base,
+                            };
+                            break;
+                        }
+                        base += line.text.len() + line.ending.as_str().len().max(1);
+                    }
+                    self.content.move_to(text_editor::Cursor {
+                        position: before.cursor.position,
+                        selection: Some(position),
+                    });
                 }
                 self.content
                     .perform(text_editor::Action::Edit(text_editor::Edit::Backspace));
@@ -526,16 +565,23 @@ impl Notes {
                     if cut {
                         self.edit(text_editor::Action::Edit(text_editor::Edit::Backspace));
                     }
-                    return iced::clipboard::write(selection);
+                    return Task::batch([
+                        iced::clipboard::write(selection),
+                        operation::focus(EDITOR),
+                    ]);
                 }
             }
             Message::Paste => {
                 self.context = None;
                 return iced::clipboard::read().map(Message::Pasted);
             }
-            Message::Pasted(Some(s)) => self.edit(text_editor::Action::Edit(
-                text_editor::Edit::Paste(Arc::new(s)),
-            )),
+            Message::Pasted(Some(s)) => {
+                self.edit(text_editor::Action::Edit(text_editor::Edit::Paste(
+                    Arc::new(s),
+                )));
+                self.focus = 0;
+                return operation::focus(EDITOR);
+            }
             Message::Pasted(None) => (),
             Message::SelectAll => {
                 self.context = None;

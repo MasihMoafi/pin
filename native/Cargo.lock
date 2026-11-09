@@ -3611,6 +3611,7 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-single-instance",
  "tempfile",
+ "unicode-segmentation",
 ]
 
 [[package]]

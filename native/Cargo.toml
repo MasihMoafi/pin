@@ -9,7 +9,7 @@ description = "Native floating priorities and scratch notes"
 default = ["desktop", "custom-protocol"]
 desktop = ["dep:gtk", "dep:tauri", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-clipboard-manager"]
 custom-protocol = ["tauri/custom-protocol"]
-iced-ui = ["dep:iced", "dep:image"]
+iced-ui = ["dep:iced", "dep:image", "dep:unicode-segmentation"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
@@ -25,6 +25,8 @@ tauri-plugin-clipboard-manager = { version = "2", optional = true }
 
 iced = { version = "=0.14.0", optional = true, default-features = false, features = ["tiny-skia", "x11", "tokio", "svg", "linux-theme-detection", "crisp"] }
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+
+unicode-segmentation = { version = "1", optional = true }
 
 [build-dependencies]
 tauri-build = "2"
