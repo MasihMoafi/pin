@@ -1,19 +1,22 @@
 # Pin and Sticky Notes
 
-Two floating Linux windows share a Rust executable and use the system WebKit
-WebView. Their interface uses shadcn/ui components and Lucide icons. There is
-no bundled browser runtime. Pin reads the existing Markdown list and
-`~/.config/Pin/settings.json`.
+Two floating Linux windows use Rust and plain file storage. Pin uses the
+system WebKit WebView with shadcn/ui components. Native Sticky Notes uses
+Iced widgets and tiny-skia software rendering, recreating the same neutral
+style with Lucide icons. It needs no WebView. Pin reads the existing Markdown
+list and `~/.config/Pin/settings.json`.
 
-Run `pin-native` for priorities, or `pin-native --notes` for a plain text
-scratch pad. Both windows resize, remember their bounds, and can be pinned
-above other windows. Install a verified build from the repository root:
+Run `pin-native` for priorities and `sticky-notes` for the scratch pad. Both
+windows resize, remember their bounds, and can be pinned above other windows.
+Install a verified Pin build from the repository root:
 
 ```sh
 python3 native/install.py /path/to/pin-native
 ```
 
 It adds both apps to the menu and updates Pin's existing login entry if enabled.
+Install native Notes with the separate command below. `pin-native --notes`
+continues to open the WebView scratch pad if needed.
 The Notes icon uses Pin's cream tile and tilted dark silhouette. Each app
 follows the desktop light/dark preference, including changes while open.
 
@@ -38,7 +41,9 @@ Sticky Notes saves to `Documents/Sticky Notes.txt`, using the desktop's
 Documents folder setting. Set `STICKY_NOTES_FILE`, or `file` in
 `~/.config/StickyNotes/settings.json`, to choose another location. It is a
 continuous scratch pad with standard selection, clipboard and a context menu.
-Window settings live in each app's `native.json` configuration file.
+Pin's window settings live in `Pin/native.json`. Native Notes uses
+`StickyNotes/iced.json` and migrates the existing `native.json` window bounds
+and pin state on its first launch, including display scaling.
 
 Both apps save automatically and atomically. Concurrent file changes pause
 saving until you choose **Use disk** or **Keep mine**. A cooperating second
@@ -71,21 +76,25 @@ setxkbmap and Pillow. Run with the hidden display and window manager active:
 DISPLAY=:94 dbus-run-session -- /usr/bin/python3 -I native/test/desktop.py /path/to/pin-native /path/to/screenshots
 ```
 
-## Native Iced prototype
+## Native Sticky Notes
 
-`notes-iced` is the feasibility build for replacing the WebView interface with
-native Rust widgets and tiny-skia software rendering. It uses the existing
-Rust file storage and keeps its window preferences in
-`StickyNotes/iced-prototype.json`. The installed launchers currently run the
-verified WebView version.
+`notes-iced` is the native scratch pad. It uses the same document path and
+atomic Rust storage as the WebView version. Installing it updates only the
+Sticky Notes menu entry and launcher; Pin keeps its verified executable.
 
-Build the prototype with `--no-default-features --features iced-ui --bin
-notes-iced`. It needs the Linux X11 keyboard runtime (`libxkbcommon-x11-0` on
-Ubuntu). The interface recreates the neutral shadcn style and uses the same
-Lucide icons and Notes app logo.
+Build with `--no-default-features --features iced-ui --bin notes-iced`. It
+needs the Linux X11 keyboard runtime (`libxkbcommon-x11-0` on Ubuntu). The app
+keeps the matching Notes logo, Undo/Redo/Save buttons and physical shortcuts.
+
+```sh
+cargo build --locked --manifest-path native/Cargo.toml --release --no-default-features --features iced-ui --bin notes-iced
+python3 native/install.py /path/to/notes-iced --notes-iced
+```
 
 `native/test/iced.py BASELINE ICED OUTPUT` drives both real windows on an
 isolated X11 display. It checks physical English/Persian shortcuts, typing,
-clipboard, toolbar actions and keyboard navigation, then records paired
-memory, startup and idle CPU measurements. The Iced workflow retains the
+clipboard, toolbar actions, keyboard navigation, file conflicts, window
+persistence and migration, dark rendering and long-note undo, then records
+paired memory, startup and idle CPU measurements. Run with
+`ICED_TEST_SCALE=2` to check display scaling. The Iced workflow retains the
 raw results and screenshots. Use isolated note files while testing.
