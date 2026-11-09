@@ -5,8 +5,8 @@ use iced::widget::{
     tooltip,
 };
 use iced::{
-    event, keyboard, mouse, window, Background, Border, Color, Element, Event, Fill, Font, Padding,
-    Point, Size, Subscription, Task, Theme,
+    event, keyboard, mouse, window, Background, Border, Color, Element, Event, Fill, Font, Length,
+    Padding, Point, Size, Subscription, Task, Theme,
 };
 use pin_native::{paths, storage};
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,10 @@ enum Message {
     SelectAll,
     UseDisk,
     KeepMine,
+    FocusTab(bool),
+    Activate,
+    MenuMove(i8),
+    DeleteWord(bool),
 }
 
 struct Snapshot {
@@ -83,6 +87,8 @@ struct Notes {
     group: Option<(Group, Instant)>,
     scroll: i32,
     window: Option<window::Id>,
+    focus: u8,
+    menu_focus: usize,
     pointer: Point,
     context: Option<Point>,
 }
@@ -151,19 +157,7 @@ fn main() -> iced::Result {
         },
         ..Default::default()
     })
-    .theme(|_: &Notes| {
-        Theme::custom(
-            "Pin",
-            iced::theme::Palette {
-                background: BG,
-                text: FG,
-                primary: FG,
-                success: Color::from_rgb8(5, 150, 105),
-                warning: Color::from_rgb8(180, 83, 9),
-                danger: Color::from_rgb8(197, 48, 48),
-            },
-        )
-    })
+    .theme(|_: &Notes| None::<Theme>)
     .subscription(Notes::subscription)
     .default_font(Font::with_name("Inter"))
     .run()
@@ -204,6 +198,8 @@ impl Notes {
             group: None,
             scroll: 0,
             window: None,
+            focus: 0,
+            menu_focus: 0,
             pointer: Point::ORIGIN,
             context: None,
         };
@@ -229,8 +225,11 @@ impl Notes {
                 Event::Keyboard(keyboard::Event::KeyPressed {
                     physical_key,
                     modifiers,
+                    key,
                     ..
-                }) if status == event::Status::Ignored => shortcut(physical_key, modifiers),
+                }) if status == event::Status::Ignored => {
+                    shortcut(physical_key, modifiers).or_else(|| navigation(&key, modifiers))
+                }
                 _ => None,
             }),
         ])
@@ -349,15 +348,18 @@ impl Notes {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Edit(action) => {
+                self.focus = 0;
                 self.context = None;
                 self.edit(action);
             }
             Message::Undo => {
+                self.focus = 0;
                 self.context = None;
                 self.history(false);
                 return operation::focus(EDITOR);
             }
             Message::Redo => {
+                self.focus = 0;
                 self.context = None;
                 self.history(true);
                 return operation::focus(EDITOR);
@@ -461,7 +463,63 @@ impl Notes {
                 }
             }
             Message::Pointer(p) => self.pointer = p,
-            Message::Context(open) => self.context = if open { Some(self.pointer) } else { None },
+            Message::Context(open) => {
+                self.context = if open { Some(self.pointer) } else { None };
+                self.menu_focus = (0..6).find(|&i| self.menu_action(i).is_some()).unwrap_or(4);
+            }
+            Message::FocusTab(reverse) => {
+                if self.context.is_some() {
+                    self.move_menu(if reverse { -1 } else { 1 });
+                } else {
+                    for _ in 0..7 {
+                        self.focus = if reverse {
+                            (self.focus + 6) % 7
+                        } else {
+                            (self.focus + 1) % 7
+                        };
+                        if self.focus == 0 || self.header_action(self.focus).is_some() {
+                            break;
+                        }
+                    }
+                }
+                if self.context.is_none() && self.focus == 0 {
+                    return operation::focus(EDITOR);
+                }
+            }
+            Message::MenuMove(direction) => {
+                if self.context.is_some() {
+                    self.move_menu(direction);
+                }
+            }
+            Message::Activate => {
+                let action = if self.context.is_some() {
+                    self.menu_action(self.menu_focus)
+                } else {
+                    self.header_action(self.focus)
+                };
+                if let Some(action) = action {
+                    return self.update(action);
+                }
+            }
+            Message::DeleteWord(forward) => {
+                let before = self.snapshot();
+                if self.content.selection().is_none() {
+                    self.content
+                        .perform(text_editor::Action::Select(if forward {
+                            text_editor::Motion::WordRight
+                        } else {
+                            text_editor::Motion::WordLeft
+                        }));
+                }
+                self.content
+                    .perform(text_editor::Action::Edit(text_editor::Edit::Backspace));
+                if self.content.text() != before.text {
+                    self.undo.push(before);
+                    self.redo.clear();
+                    self.group = None;
+                    self.changed();
+                }
+            }
             Message::Copy(cut) => {
                 self.context = None;
                 if let Some(selection) = self.content.selection() {
@@ -507,6 +565,35 @@ impl Notes {
         }
         Task::none()
     }
+    fn header_action(&self, index: u8) -> Option<Message> {
+        match index {
+            1 => (!self.undo.is_empty()).then_some(Message::Undo),
+            2 => (!self.redo.is_empty()).then_some(Message::Redo),
+            3 => Some(Message::Save),
+            4 => Some(Message::Pin),
+            5 => Some(Message::Minimize),
+            6 => Some(Message::Close),
+            _ => None,
+        }
+    }
+    fn menu_action(&self, index: usize) -> Option<Message> {
+        match index {
+            0 => self.header_action(1),
+            1 => self.header_action(2),
+            2 | 3 => self.content.selection().map(|_| Message::Copy(index == 3)),
+            4 => Some(Message::Paste),
+            5 => Some(Message::SelectAll),
+            _ => None,
+        }
+    }
+    fn move_menu(&mut self, direction: i8) {
+        for _ in 0..6 {
+            self.menu_focus = (self.menu_focus as i8 + direction + 6) as usize % 6;
+            if self.menu_action(self.menu_focus).is_some() {
+                break;
+            }
+        }
+    }
     fn view(&self) -> Element<'_, Message> {
         let header = row![
             mouse_area(
@@ -519,12 +606,14 @@ impl Notes {
             icon_button(
                 "Undo (Ctrl+Z)",
                 "undo",
-                (!self.undo.is_empty()).then_some(Message::Undo)
+                (!self.undo.is_empty()).then_some(Message::Undo),
+                self.focus == 1
             ),
             icon_button(
                 "Redo (Ctrl+Shift+Z)",
                 "redo",
-                (!self.redo.is_empty()).then_some(Message::Redo)
+                (!self.redo.is_empty()).then_some(Message::Redo),
+                self.focus == 2
             ),
             icon_button(
                 "Save (Ctrl+S)",
@@ -533,23 +622,34 @@ impl Notes {
                 } else {
                     "save"
                 },
-                Some(Message::Save)
+                Some(Message::Save),
+                self.focus == 3
             ),
             container(space())
                 .width(1)
                 .height(16)
-                .style(|_| container::Style::default().background(LINE)),
+                .style(|theme| container::Style::default().background(line(theme))),
             icon_button(
                 if self.bounds.pinned.unwrap_or(true) {
                     "Unpin from top"
                 } else {
                     "Keep on top"
                 },
-                "pin",
-                Some(Message::Pin)
+                if self.bounds.pinned.unwrap_or(true) {
+                    "pin-filled"
+                } else {
+                    "pin"
+                },
+                Some(Message::Pin),
+                self.focus == 4
             ),
-            icon_button("Minimize", "minus", Some(Message::Minimize)),
-            icon_button("Close", "x", Some(Message::Close))
+            icon_button(
+                "Minimize",
+                "minus",
+                Some(Message::Minimize),
+                self.focus == 5
+            ),
+            icon_button("Close", "x", Some(Message::Close), self.focus == 6)
         ]
         .spacing(2)
         .align_y(iced::Center)
@@ -563,14 +663,37 @@ impl Notes {
             .size(15)
             .line_height(iced::widget::text::LineHeight::Relative(1.85))
             .wrapping(iced::widget::text::Wrapping::Word)
-            .style(|_, _| text_editor::Style {
-                background: BG.into(),
+            .style(|theme, _| text_editor::Style {
+                background: bg(theme).into(),
                 border: Border::default(),
-                placeholder: MUTED,
-                value: FG,
+                placeholder: muted(theme),
+                value: fg(theme),
                 selection: Color::from_rgba8(161, 161, 170, 0.3),
             })
             .key_binding(|press| {
+                let nav = navigation(&press.key, press.modifiers);
+                if matches!(nav, Some(Message::FocusTab(_))) {
+                    return Some(text_editor::Binding::Sequence(vec![
+                        text_editor::Binding::Unfocus,
+                        text_editor::Binding::Custom(nav.unwrap()),
+                    ]));
+                }
+                if self.context.is_some() || matches!(nav, Some(Message::Context(true))) {
+                    if let Some(nav) = nav {
+                        return Some(text_editor::Binding::Custom(nav));
+                    }
+                }
+                if press.modifiers.jump() {
+                    match press.key.as_ref() {
+                        keyboard::Key::Named(keyboard::key::Named::Backspace) => {
+                            return Some(text_editor::Binding::Custom(Message::DeleteWord(false)))
+                        }
+                        keyboard::Key::Named(keyboard::key::Named::Delete) => {
+                            return Some(text_editor::Binding::Custom(Message::DeleteWord(true)))
+                        }
+                        _ => (),
+                    }
+                }
                 shortcut(press.physical_key, press.modifiers)
                     .map(text_editor::Binding::Custom)
                     .or_else(|| text_editor::Binding::from_key_press(press))
@@ -580,7 +703,7 @@ impl Notes {
             container(space())
                 .height(1)
                 .width(Fill)
-                .style(|_| container::Style::default().background(LINE))
+                .style(|theme| container::Style::default().background(line(theme)))
         ];
         if self.conflict {
             body = body.push(
@@ -604,11 +727,11 @@ impl Notes {
         let base = container(body)
             .width(Fill)
             .height(Fill)
-            .style(|_| container::Style {
-                background: Some(BG.into()),
-                text_color: Some(FG),
+            .style(|theme| container::Style {
+                background: Some(bg(theme).into()),
+                text_color: Some(fg(theme)),
                 border: Border {
-                    color: LINE,
+                    color: line(theme),
                     width: 1.,
                     radius: 0.into(),
                 },
@@ -616,20 +739,19 @@ impl Notes {
             });
         let mut layers = stack![base];
         if let Some(p) = self.context {
-            let menu = column![
-                menu_item("Undo", (!self.undo.is_empty()).then_some(Message::Undo)),
-                menu_item("Redo", (!self.redo.is_empty()).then_some(Message::Redo)),
-                menu_item("Copy", Some(Message::Copy(false))),
-                menu_item("Cut", Some(Message::Copy(true))),
-                menu_item("Paste", Some(Message::Paste)),
-                menu_item("Select all", Some(Message::SelectAll))
-            ]
+            let menu = column((0..6).map(|i| {
+                menu_item(
+                    ["Undo", "Redo", "Copy", "Cut", "Paste", "Select all"][i],
+                    self.menu_action(i),
+                    self.menu_focus == i,
+                )
+            }))
             .padding(4)
             .spacing(1);
-            let overlay = container(menu).width(170).style(|_| container::Style {
-                background: Some(Color::WHITE.into()),
+            let overlay = container(menu).width(170).style(|theme| container::Style {
+                background: Some(bg(theme).into()),
                 border: Border {
-                    color: LINE,
+                    color: line(theme),
                     width: 1.,
                     radius: 6.into(),
                 },
@@ -646,53 +768,67 @@ impl Notes {
                 bottom: 0.,
             }));
         }
-        // Narrow resize targets stay outside the text field and toolbar actions.
-        let right = mouse_area(container(space()).width(4).height(Fill))
-            .on_press(Message::Resize(window::Direction::East))
-            .interaction(mouse::Interaction::ResizingHorizontally);
-        let bottom = mouse_area(container(space()).height(4).width(Fill))
-            .on_press(Message::Resize(window::Direction::South))
-            .interaction(mouse::Interaction::ResizingVertically);
-        layers = layers.push(
-            container(right)
-                .width(Fill)
-                .height(Fill)
-                .align_x(iced::Right),
-        );
-        layers = layers.push(
-            container(bottom)
-                .width(Fill)
-                .height(Fill)
-                .align_y(iced::Bottom),
-        );
+        for direction in [
+            window::Direction::North,
+            window::Direction::South,
+            window::Direction::West,
+            window::Direction::East,
+            window::Direction::NorthWest,
+            window::Direction::NorthEast,
+            window::Direction::SouthWest,
+            window::Direction::SouthEast,
+        ] {
+            layers = layers.push(resize_handle(direction));
+        }
         layers.into()
     }
 }
 
-fn menu_item(label: &'static str, action: Option<Message>) -> Element<'static, Message> {
+fn menu_item(
+    label: &'static str,
+    action: Option<Message>,
+    focused: bool,
+) -> Element<'static, Message> {
     button(text(label).size(13))
         .width(Fill)
         .padding([5, 8])
         .on_press_maybe(action)
-        .style(ghost)
+        .style(move |theme, status| focus_style(theme, status, focused))
         .into()
 }
 fn icon_button(
     label: &'static str,
     name: &str,
     action: Option<Message>,
+    focused: bool,
 ) -> Element<'static, Message> {
-    let handle=svg::Handle::from_memory(format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#202023" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{}</svg>"##,icon_path(name)).into_bytes());
+    let disabled = action.is_none();
+    let fill = if name == "pin-filled" {
+        "#202023"
+    } else {
+        "none"
+    };
+    let handle=svg::Handle::from_memory(format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="{fill}" stroke="#202023" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{}</svg>"##,icon_path(name)).into_bytes());
     tooltip(
-        button(container(svg(handle).width(15).height(15)).center(26))
-            .padding(0)
-            .on_press_maybe(action)
-            .style(ghost),
+        button(
+            container(
+                svg(handle)
+                    .width(15)
+                    .height(15)
+                    .style(move |theme, _| svg::Style {
+                        color: Some(if disabled { muted(theme) } else { fg(theme) }),
+                    }),
+            )
+            .center(26),
+        )
+        .padding(0)
+        .on_press_maybe(action)
+        .style(move |theme, status| focus_style(theme, status, focused)),
         container(text(label).size(12))
             .padding([4, 7])
-            .style(|_| container::Style {
-                background: Some(FG.into()),
-                text_color: Some(Color::WHITE),
+            .style(|theme| container::Style {
+                background: Some(fg(theme).into()),
+                text_color: Some(bg(theme)),
                 border: Border {
                     radius: 5.into(),
                     ..Default::default()
@@ -704,12 +840,17 @@ fn icon_button(
     .delay(Duration::from_millis(300))
     .into()
 }
-fn ghost(_: &Theme, status: button::Status) -> button::Style {
+fn ghost(theme: &Theme, status: button::Status) -> button::Style {
     let disabled = matches!(status, button::Status::Disabled);
     button::Style {
-        background: matches!(status, button::Status::Hovered | button::Status::Pressed)
-            .then_some(Background::Color(Color::from_rgb8(240, 240, 241))),
-        text_color: if disabled { MUTED } else { FG },
+        background: matches!(status, button::Status::Hovered | button::Status::Pressed).then_some(
+            Background::Color(if is_dark(theme) {
+                Color::from_rgb8(43, 43, 48)
+            } else {
+                Color::from_rgb8(240, 240, 241)
+            }),
+        ),
+        text_color: if disabled { muted(theme) } else { fg(theme) },
         border: Border {
             radius: 5.into(),
             ..Default::default()
@@ -724,7 +865,7 @@ fn icon_path(name: &str) -> &'static str {
         "save" => {
             r#"<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8V3"/>"#
         }
-        "pin" => r#"<path d="M12 17v5M9 7V4h6v3l-1 4 4 4v2H6v-2l4-4-1-4Z"/>"#,
+        "pin" | "pin-filled" => r#"<path d="M12 17v5M9 7V4h6v3l-1 4 4 4v2H6v-2l4-4-1-4Z"/>"#,
         "minus" => r#"<path d="M5 12h14"/>"#,
         "check" => r#"<path d="m5 12 4 4L19 6"/>"#,
         _ => r#"<path d="m6 6 12 12M6 18 18 6"/>"#,
@@ -778,6 +919,28 @@ mod tests {
     }
 
     #[test]
+    fn word_delete_restores_original_caret_and_text_on_undo() {
+        let mut n = note("سلام world");
+        let cursor = n.content.cursor();
+        let _ = n.update(Message::DeleteWord(false));
+        assert_eq!(n.content.text(), "سلام ");
+        n.history(false);
+        assert_eq!(n.content.text(), "سلام world");
+        assert_eq!(n.content.cursor(), cursor);
+    }
+
+    #[test]
+    fn tab_reaches_actions_and_skips_disabled_history_buttons() {
+        let mut n = note("Hello");
+        for expected in [3, 4, 5, 6, 0] {
+            let _ = n.update(Message::FocusTab(false));
+            assert_eq!(n.focus, expected);
+        }
+        let _ = n.update(Message::FocusTab(true));
+        assert_eq!(n.focus, 6);
+    }
+
+    #[test]
     fn shortcut_actions_use_physical_keys() {
         assert!(matches!(
             shortcut(Physical::Code(Code::KeyZ), keyboard::Modifiers::CTRL),
@@ -795,4 +958,105 @@ mod tests {
             Some(Message::Save)
         ));
     }
+}
+
+fn is_dark(theme: &Theme) -> bool {
+    theme.palette().background.r < 0.5
+}
+fn bg(theme: &Theme) -> Color {
+    if is_dark(theme) {
+        Color::from_rgb8(25, 25, 28)
+    } else {
+        BG
+    }
+}
+fn fg(theme: &Theme) -> Color {
+    if is_dark(theme) {
+        Color::from_rgb8(239, 239, 241)
+    } else {
+        FG
+    }
+}
+fn muted(theme: &Theme) -> Color {
+    if is_dark(theme) {
+        Color::from_rgb8(161, 161, 170)
+    } else {
+        MUTED
+    }
+}
+fn line(theme: &Theme) -> Color {
+    if is_dark(theme) {
+        Color::from_rgb8(51, 51, 56)
+    } else {
+        LINE
+    }
+}
+
+fn focus_style(theme: &Theme, status: button::Status, focused: bool) -> button::Style {
+    let mut style = ghost(theme, status);
+    if focused {
+        style.border = Border {
+            color: muted(theme),
+            width: 1.,
+            radius: 5.into(),
+        };
+    }
+    style
+}
+fn navigation(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Message> {
+    use keyboard::key::Named;
+    match key.as_ref() {
+        keyboard::Key::Named(Named::Tab) => Some(Message::FocusTab(modifiers.shift())),
+        keyboard::Key::Named(Named::Enter | Named::Space) => Some(Message::Activate),
+        keyboard::Key::Character(" ") => Some(Message::Activate),
+        keyboard::Key::Named(Named::Escape) => Some(Message::Context(false)),
+        keyboard::Key::Named(Named::ContextMenu) => Some(Message::Context(true)),
+        keyboard::Key::Named(Named::F10) if modifiers.shift() => Some(Message::Context(true)),
+        keyboard::Key::Named(Named::ArrowUp) => Some(Message::MenuMove(-1)),
+        keyboard::Key::Named(Named::ArrowDown) => Some(Message::MenuMove(1)),
+        _ => None,
+    }
+}
+
+fn resize_handle(direction: window::Direction) -> Element<'static, Message> {
+    use window::Direction::*;
+    let vertical = matches!(direction, East | West);
+    let horizontal = matches!(direction, North | South);
+    let target = mouse_area(
+        container(space())
+            .width(if horizontal {
+                Length::Fill
+            } else {
+                Length::Fixed(if vertical { 4. } else { 7. })
+            })
+            .height(if vertical {
+                Length::Fill
+            } else {
+                Length::Fixed(if horizontal { 4. } else { 7. })
+            }),
+    )
+    .on_press(Message::Resize(direction))
+    .interaction(if vertical {
+        mouse::Interaction::ResizingHorizontally
+    } else if horizontal {
+        mouse::Interaction::ResizingVertically
+    } else if matches!(direction, NorthEast | SouthWest) {
+        mouse::Interaction::ResizingDiagonallyUp
+    } else {
+        mouse::Interaction::ResizingDiagonallyDown
+    });
+    container(target)
+        .width(Fill)
+        .height(Fill)
+        .align_x(if matches!(direction, East | NorthEast | SouthEast) {
+            iced::Right
+        } else {
+            iced::Left
+        })
+        .align_y(if matches!(direction, South | SouthEast | SouthWest) {
+            iced::Bottom
+        } else {
+            iced::Top
+        })
+        .into()
 }
