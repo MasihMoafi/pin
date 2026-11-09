@@ -56,16 +56,19 @@ def check(label):
     print('PASS', label, flush=True)
 
 
-def start(kind, label):
+def start(kind, label, reuse=False, theme=None):
     case = root / label
     config = case / 'config/StickyNotes'
-    config.mkdir(parents=True)
+    config.mkdir(parents=True, exist_ok=True)
     file = case / 'Notes.txt'
-    file.write_text(initial)
-    for prefs in ['native.json', 'iced-prototype.json']:
+    if not reuse:
+        file.write_text(initial)
+    for prefs in ([] if reuse else ['native.json', 'iced-prototype.json']):
         (config / prefs).write_text(json.dumps({'width': 430, 'height': 320, 'x': 40, 'y': 60, 'pinned': True}))
     env = dict(base_env, XDG_CONFIG_HOME=str(case / 'config'), STICKY_NOTES_FILE=str(file))
-    log = open(output / (label + '.log'), 'w')
+    if theme is not None:
+        env['ICED_THEME'] = theme
+    log = open(output / (label + '.log'), 'a')
     launch = time.monotonic()
     p = subprocess.Popen([baseline, '--notes'] if kind == 'webview' else [variant], env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     log.close()
@@ -82,9 +85,14 @@ def start(kind, label):
 
 
 def close(p, wid):
-    click(wid, 405, 21)
+    bounds = geometry(wid)
+    click(wid, bounds['WIDTH'] - 25, 21)
     p.wait(timeout=8)
     assert p.returncode == 0
+
+
+def geometry(wid):
+    return {k: int(v) for k, v in (line.split('=', 1) for line in x('getwindowgeometry', '--shell', wid).splitlines())}
 
 
 def click(wid, px, py, button=1):
@@ -213,7 +221,74 @@ try:
     saved(file, typed)
     check('Tab and Enter operate toolbar history actions')
     shot('iced-notes-light')
-    # The footprint comparison uses fresh windows with unchanged fixture files.
+    above = lambda: '_NET_WM_STATE_ABOVE' in subprocess.check_output(['xprop', '-id', wid, '_NET_WM_STATE'], env=base_env, text=True)
+    wait(above, 'Initial pin state')
+    click(wid, 349, 21)
+    wait(lambda: not above(), 'Unpin changes real window state')
+    click(wid, 349, 21)
+    wait(above, 'Repin changes real window state')
+    check('Pin and unpin control the real window manager state')
+    x('windowsize', wid, 350, 260)
+    x('windowmove', wid, 80, 90)
+    time.sleep(.4)
+    bounds = geometry(wid)
+    shot('iced-notes-narrow')
+    close(p, wid)
+    p, wid, file, _ = start('iced', 'editing', reuse=True)
+    assert all(geometry(wid)[key] == bounds[key] for key in ['WIDTH', 'HEIGHT', 'X', 'Y'])
+    saved(file, typed)
+    check('Text and window size/position persist after close and reopen')
+    # Restore the controlled size for the remaining interaction checks.
+    x('windowsize', wid, 430, 320)
+    time.sleep(.3)
+    click(wid, 100, 120)
+    x('key', 'ctrl+a', 'shift+F10')
+    time.sleep(.25)
+    x('key', 'Return')
+    copied = subprocess.check_output(['xclip', '-selection', 'clipboard', '-out'], env=base_env, text=True)
+    assert copied == typed
+    x('key', 'ctrl+End', 'shift+F10')
+    time.sleep(.25)
+    x('key', 'Return')
+    saved(file, typed + typed)
+    physical(52)
+    saved(file, typed)
+    check('Keyboard context menu copies and pastes plain text and undo restores it')
+    x('key', 'ctrl+End', 'shift+F10')
+    time.sleep(.2)
+    x('key', 'Escape')
+    time.sleep(.2)
+    x('type', '--clearmodifiers', '--delay', 5, ' after menu')
+    saved(file, typed + ' after menu')
+    physical(52)
+    saved(file, typed)
+    check('Escape restores editor focus after a context menu')
+    x('key', 'ctrl+End')
+    x('type', '--clearmodifiers', '--delay', 1, ' local draft')
+    file.write_text('Changed elsewhere\n')
+    time.sleep(.9)
+    shot('iced-conflict')
+    click(wid, 160, 105)
+    saved(file, typed + ' local draft')
+    click(wid, 100, 120)
+    x('key', 'ctrl+End')
+    x('type', '--clearmodifiers', '--delay', 1, ' another draft')
+    file.write_text('Disk version\n')
+    time.sleep(.9)
+    click(wid, 50, 105)
+    saved(file, 'Disk version\n')
+    click(wid, 100, 120)
+    x('key', 'ctrl+End')
+    x('type', '--clearmodifiers', '--delay', 5, 'Loaded')
+    saved(file, 'Disk version\nLoaded')
+    check('Concurrent disk edits keep local text and both conflict choices work')
+    close(p, wid)
+    p, wid, file, _ = start('iced', 'dark', theme='Dark')
+    shot('iced-notes-dark')
+    bounds = geometry(wid)
+    pixel = ImageGrab.grab(xdisplay=base_env['DISPLAY']).getpixel((bounds['X'] + 30, bounds['Y'] + bounds['HEIGHT'] - 35))
+    assert 15 <= pixel[0] <= 45 and 15 <= pixel[1] <= 45 and 15 <= pixel[2] <= 45, pixel
+    check('Native dark theme reaches the rendered window')
     close(p, wid)
     results = []
     for repeat in range(4):

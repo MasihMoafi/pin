@@ -644,10 +644,13 @@ impl Notes {
     fn view(&self) -> Element<'_, Message> {
         let header = row![
             mouse_area(
-                container(text("Notes").size(13))
-                    .width(Fill)
-                    .height(Fill)
-                    .align_y(iced::Center)
+                container(text("Notes").size(13).font(Font {
+                    weight: iced::font::Weight::Semibold,
+                    ..Font::with_name("Inter")
+                }))
+                .width(Fill)
+                .height(Fill)
+                .align_y(iced::Center)
             )
             .on_press(Message::Drag),
             icon_button(
@@ -701,15 +704,15 @@ impl Notes {
         .spacing(2)
         .align_y(iced::Center)
         .height(42)
-        .padding([0, 12]);
+        .padding([0., 11.5]);
         let editor = text_editor(&self.content)
             .id(EDITOR)
             .on_action(Message::Edit)
             .height(Fill)
-            .padding([16, 20])
+            .padding([14., 17.5])
             .size(15)
             .placeholder("Write a note…")
-            .line_height(iced::widget::text::LineHeight::Relative(1.85))
+            .line_height(iced::widget::text::LineHeight::Relative(24.5 / 15.))
             .wrapping(iced::widget::text::Wrapping::Word)
             .style(|theme, _| text_editor::Style {
                 background: bg(theme).into(),
@@ -759,8 +762,14 @@ impl Notes {
                     column![
                         text("This file changed elsewhere. Choose which version to keep.").size(12),
                         row![
-                            button("Use disk").on_press(Message::UseDisk),
-                            button("Keep mine").on_press(Message::KeepMine)
+                            button(text("Use disk").size(12))
+                                .padding([5, 10])
+                                .on_press(Message::UseDisk)
+                                .style(outline),
+                            button(text("Keep mine").size(12))
+                                .padding([5, 10])
+                                .on_press(Message::KeepMine)
+                                .style(primary)
                         ]
                         .spacing(8)
                     ]
@@ -798,6 +807,7 @@ impl Notes {
             .spacing(1);
             let overlay = container(menu).width(170).style(|theme| container::Style {
                 background: Some(bg(theme).into()),
+                text_color: Some(fg(theme)),
                 border: Border {
                     color: line(theme),
                     width: 1.,
@@ -1022,6 +1032,22 @@ fn resize_handle(direction: window::Direction) -> Element<'static, Message> {
             iced::Top
         })
         .into()
+}
+
+fn primary(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = ghost(theme, status);
+    style.background = Some(fg(theme).into());
+    style.text_color = bg(theme);
+    style
+}
+fn outline(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = ghost(theme, status);
+    style.border = Border {
+        color: line(theme),
+        width: 1.,
+        radius: 5.into(),
+    };
+    style
 }
 
 #[cfg(test)]

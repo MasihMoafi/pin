@@ -70,3 +70,22 @@ setxkbmap and Pillow. Run with the hidden display and window manager active:
 ```sh
 DISPLAY=:94 dbus-run-session -- /usr/bin/python3 -I native/test/desktop.py /path/to/pin-native /path/to/screenshots
 ```
+
+## Native Iced prototype
+
+`notes-iced` is the feasibility build for replacing the WebView interface with
+native Rust widgets and tiny-skia software rendering. It uses the existing
+Rust file storage and keeps its window preferences in
+`StickyNotes/iced-prototype.json`. The installed launchers currently run the
+verified WebView version.
+
+Build the prototype with `--no-default-features --features iced-ui --bin
+notes-iced`. It needs the Linux X11 keyboard runtime (`libxkbcommon-x11-0` on
+Ubuntu). The interface recreates the neutral shadcn style and uses the same
+Lucide icons and Notes app logo.
+
+`native/test/iced.py BASELINE ICED OUTPUT` drives both real windows on an
+isolated X11 display. It checks physical English/Persian shortcuts, typing,
+clipboard, toolbar actions and keyboard navigation, then records paired
+memory, startup and idle CPU measurements. The Iced workflow retains the
+raw results and screenshots. Use isolated note files while testing.
