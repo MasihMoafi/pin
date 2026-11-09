@@ -346,9 +346,10 @@ function keys(e: KeyboardEvent, item: Item, title: HTMLElement): void {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { closeMenu(); return; }
   if (!(e.ctrlKey || e.metaKey) || (e.target as Element | null)?.closest?.('.pop')) return;
-  const k = e.key.toLowerCase();
+  const k = e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : e.key.toLowerCase();
   if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
   else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+  else if (k === 's') { e.preventDefault(); void flush(); }
 }, true);
 
 // ---------- menus ----------
