@@ -855,17 +855,22 @@ impl State {
             .on_enter(last.map_or(Message::CancelDrag, |id| Message::Over(id, true)))
             .on_exit(last.map_or(Message::CancelDrag, Message::Leave));
         body = body.push(footer);
-        scrollable(body)
-            .id(LIST)
-            .direction(scrollable::Direction::Vertical(
-                scrollable::Scrollbar::new()
-                    .width(6)
-                    .scroller_width(6)
-                    .margin(8),
-            ))
-            .on_scroll(Message::Scroll)
-            .height(Fill)
-            .into()
+        container(
+            scrollable(body)
+                .id(LIST)
+                .direction(scrollable::Direction::Vertical(
+                    scrollable::Scrollbar::new().width(6).scroller_width(6),
+                ))
+                .on_scroll(Message::Scroll)
+                .height(Fill),
+        )
+        .padding(iced::Padding {
+            right: 8.,
+            ..Default::default()
+        })
+        .width(Fill)
+        .height(Fill)
+        .into()
     }
     fn task_view<'a>(&'a self, i: usize, t: &'a Item) -> Element<'a, Message> {
         let id = t.id;
@@ -1000,7 +1005,7 @@ impl State {
             top: 4.,
             bottom: 6.,
             left: (t.depth.min(6) * 16) as f32,
-            right: 12.,
+            right: 4.,
         })
         .align_y(iced::Top);
         let indicator = self.drop == Some((id, false));
