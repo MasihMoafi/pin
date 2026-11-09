@@ -444,6 +444,15 @@ impl Notes {
                             self.bounds.x = Some(p.x);
                             self.bounds.y = Some(p.y);
                         }
+                        // Iced creates X11 windows hidden; apply this after mapping.
+                        return window::set_level(
+                            id,
+                            if self.bounds.pinned.unwrap_or(true) {
+                                window::Level::AlwaysOnTop
+                            } else {
+                                window::Level::Normal
+                            },
+                        );
                     }
                     window::Event::Moved(p) => {
                         self.bounds.x = Some(p.x);

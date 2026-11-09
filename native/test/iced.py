@@ -117,7 +117,13 @@ def saved(file, expected):
 
 
 def shot(name):
-    ImageGrab.grab(xdisplay=base_env['DISPLAY']).save(output / (name + '.png'))
+    im = ImageGrab.grab(xdisplay=base_env['DISPLAY'])
+    try:
+        bounds = geometry(wid)
+        im = im.crop((bounds['X'], bounds['Y'], bounds['X'] + bounds['WIDTH'], bounds['Y'] + bounds['HEIGHT']))
+    except (NameError, OSError, subprocess.CalledProcessError):
+        pass
+    im.save(output / (name + '.png'))
 
 
 def tree(pid):
@@ -210,6 +216,18 @@ try:
     physical(52)
     saved(file, typed)
     check('Persian keyboard typing and grouped undo')
+    x('key', 'ctrl+End')
+    subprocess.run(['setxkbmap', '-layout', 'us', '-variant', 'intl'], env=base_env, check=True)
+    for code in [48, 26]:  # dead acute, then e: one composed character
+        xtest.XTestFakeKeyEvent(display, code, 1, 0)
+        xtest.XTestFakeKeyEvent(display, code, 0, 0)
+        xlib.XSync(display, 0)
+        time.sleep(.08)
+    saved(file, typed + 'é')
+    subprocess.run(['setxkbmap', '-layout', 'us,ir'], env=base_env, check=True)
+    physical(52)
+    saved(file, typed)
+    check('X11 composed input commits and undoes as one character')
     x('key', 'ctrl+End', 'ctrl+BackSpace')
     saved(file, typed.rsplit(' ', 1)[0] + ' ')
     physical(52)
