@@ -10,6 +10,7 @@ use iced::{
 };
 use pin_native::{paths, storage};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -707,6 +708,7 @@ impl Notes {
             .height(Fill)
             .padding([16, 20])
             .size(15)
+            .placeholder("Write a note…")
             .line_height(iced::widget::text::LineHeight::Relative(1.85))
             .wrapping(iced::widget::text::Wrapping::Word)
             .style(|theme, _| text_editor::Style {
@@ -849,12 +851,17 @@ fn icon_button(
     focused: bool,
 ) -> Element<'static, Message> {
     let disabled = action.is_none();
-    let fill = if name == "pin-filled" {
-        "#202023"
+    let data = icon_data(name);
+    let bytes: Cow<'static, [u8]> = if name == "pin-filled" {
+        Cow::Owned(
+            String::from_utf8_lossy(data)
+                .replace("fill=\"none\"", "fill=\"currentColor\"")
+                .into_bytes(),
+        )
     } else {
-        "none"
+        Cow::Borrowed(data)
     };
-    let handle=svg::Handle::from_memory(format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="{fill}" stroke="#202023" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{}</svg>"##,icon_path(name)).into_bytes());
+    let handle = svg::Handle::from_memory(bytes);
     tooltip(
         button(
             container(
@@ -904,17 +911,15 @@ fn ghost(theme: &Theme, status: button::Status) -> button::Style {
         ..Default::default()
     }
 }
-fn icon_path(name: &str) -> &'static str {
+fn icon_data(name: &str) -> &'static [u8] {
     match name {
-        "undo" => r#"<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15.5-6.4L3 13"/>"#,
-        "redo" => r#"<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15.5-6.4L21 13"/>"#,
-        "save" => {
-            r#"<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8V3"/>"#
-        }
-        "pin" | "pin-filled" => r#"<path d="M12 17v5M9 7V4h6v3l-1 4 4 4v2H6v-2l4-4-1-4Z"/>"#,
-        "minus" => r#"<path d="M5 12h14"/>"#,
-        "check" => r#"<path d="m5 12 4 4L19 6"/>"#,
-        _ => r#"<path d="m6 6 12 12M6 18 18 6"/>"#,
+        "undo" => include_bytes!("../icons/undo-2.svg"),
+        "redo" => include_bytes!("../icons/redo-2.svg"),
+        "save" => include_bytes!("../icons/save.svg"),
+        "pin" | "pin-filled" => include_bytes!("../icons/pin.svg"),
+        "minus" => include_bytes!("../icons/minus.svg"),
+        "check" => include_bytes!("../icons/check.svg"),
+        _ => include_bytes!("../icons/x.svg"),
     }
 }
 

@@ -70,7 +70,11 @@ def start(kind, label):
     p = subprocess.Popen([baseline, '--notes'] if kind == 'webview' else [variant], env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     log.close()
     children.append(p)
-    wid = wait(lambda: x('search', '--onlyvisible', '--pid', p.pid).splitlines()[0], kind + ' window opens', 25)
+    def mapped():
+        if p.poll() is not None:
+            raise RuntimeError(kind + ' exited during startup: ' + (output / (label + '.log')).read_text())
+        return x('search', '--onlyvisible', '--pid', p.pid).splitlines()[0]
+    wid = wait(mapped, kind + ' window opens', 25)
     elapsed = (time.monotonic() - launch) * 1000
     x('windowfocus', wid)
     time.sleep(1.5)

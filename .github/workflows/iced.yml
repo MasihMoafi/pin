@@ -33,7 +33,7 @@ jobs:
         with:
           name: notes-iced-lock
           path: native/Cargo.lock
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb openbox xdotool x11-utils xclip python3-pil fonts-inter fonts-noto-core libwebkit2gtk-4.1-0 libgtk-3-0
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb openbox xdotool x11-utils xclip python3-pil ripgrep libxkbcommon-x11-0 fonts-inter fonts-noto-core libwebkit2gtk-4.1-0 libgtk-3-0
       - name: Download the verified WebView baseline
         env:
           GH_TOKEN: ${{ github.token }}
