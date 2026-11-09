@@ -15,7 +15,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
   unique temporary file and preserve a list-file symlink.
 
 ## Window
-- Both apps use shadcn/ui components and Lucide icons in a system WebView, with Rust handling files and windows.
+- Both apps use native Rust/Iced widgets with tiny-skia software rendering, a consistent shadcn-style interface and Lucide icons; no WebView.
 - Sticky Notes uses Pin's cream icon tile and tilted dark silhouette, and remembers its resizable window.
 - Floats on top; the header pin (Lucide's, as in Elpis) is filled in its own color while pinned, outline when not.
 - Opens on the right of the screen the first time; starts at log-in (`~/.config/autostart/pin.desktop`).
@@ -43,7 +43,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 ## Acceptance
 Both Rust apps provide toolbar Undo, Redo and Save. Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and Ctrl+S call the same actions under English and Persian keyboard layouts. Sticky Notes is a plain text scratch pad.
 
-Drive the Rust executable with `native/test/desktop.py` on a hidden display; see `native/README.md`.
+Drive the native executables with `native/test/pin_iced.py` and `native/test/iced.py` on a hidden display; see `native/README.md`. `native/test/desktop.py` covers the previous WebView version.
 On an isolated GNOME Wayland desktop, `native/test/resize.py PIN NOTES OUTPUT` captures continuous edge drags and checks checkbox contrast, completion and undo. Resizing must retain the painted contents without black frames or edges.
 
 Against the app on a hidden display with `--remote-debugging-port=9377`, run `python3 test/e2e.py <scratch list>`.

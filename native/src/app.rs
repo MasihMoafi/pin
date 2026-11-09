@@ -1,5 +1,6 @@
 //! Shared native Pin and Notes window, persistence and history.
 mod pin;
+mod reveal;
 use crate::{paths, storage};
 use iced::keyboard::key::{Code, Physical};
 use iced::widget::{

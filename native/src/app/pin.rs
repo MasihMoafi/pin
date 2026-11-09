@@ -17,6 +17,7 @@ use std::{
 };
 
 const LIST: &str = "pin-list";
+const OPTIONS: &str = "pin-options";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
@@ -79,6 +80,8 @@ pub enum Message {
     Drop,
     CancelDrag,
     Scroll(scrollable::Viewport),
+    OptionsScroll(scrollable::Viewport),
+    ScrollTo(&'static str, f32),
     Tick,
 }
 
@@ -88,6 +91,7 @@ struct Options {
     time: text_editor::Content,
     color: text_editor::Content,
     focus: u8,
+    offset: scrollable::AbsoluteOffset,
     error: Option<(String, Instant)>,
 }
 struct EditorSnapshot {
@@ -112,7 +116,14 @@ pub struct Snapshot {
     editors: BTreeMap<u64, EditorSnapshot>,
     folded: HashSet<u64>,
     active: Target,
-    options: Option<(u64, EditorSnapshot, EditorSnapshot, EditorSnapshot, u8)>,
+    options: Option<(
+        u64,
+        EditorSnapshot,
+        EditorSnapshot,
+        EditorSnapshot,
+        u8,
+        scrollable::AbsoluteOffset,
+    )>,
     offset: scrollable::AbsoluteOffset,
 }
 pub struct State {
@@ -195,6 +206,7 @@ impl State {
                     EditorSnapshot::new(&o.time),
                     EditorSnapshot::new(&o.color),
                     o.focus,
+                    o.offset,
                 )
             }),
             offset: self.offset,
@@ -210,22 +222,57 @@ impl State {
             .collect();
         self.folded = snapshot.folded;
         self.active = snapshot.active;
-        self.options = snapshot.options.map(|(id, d, t, c, focus)| Options {
-            id,
-            date: d.restore(),
-            time: t.restore(),
-            color: c.restore(),
-            focus,
-            error: None,
-        });
+        self.options = snapshot
+            .options
+            .map(|(id, d, t, c, focus, offset)| Options {
+                id,
+                date: d.restore(),
+                time: t.restore(),
+                color: c.restore(),
+                focus,
+                offset,
+                error: None,
+            });
         self.offset = snapshot.offset;
         self.dragging = None;
         self.drop = None;
         self.sync();
-        Task::batch([self.focus(), operation::scroll_to(LIST, self.offset)])
+        Task::batch([
+            self.focus(),
+            operation::scroll_to(LIST, self.offset),
+            self.options
+                .as_ref()
+                .map_or_else(Task::none, |o| operation::scroll_to(OPTIONS, o.offset)),
+        ])
     }
     pub fn focus(&self) -> Task<Message> {
+        if self
+            .options
+            .as_ref()
+            .is_some_and(|o| !matches!(o.focus, 1 | 2 | 18))
+        {
+            return Task::none();
+        }
         operation::focus(self.active.id())
+    }
+    fn focus_and_reveal(&self) -> Task<Message> {
+        let (scroll, target) = if let Some(o) = &self.options {
+            (
+                OPTIONS,
+                match o.focus {
+                    1 => Target::Date.id(),
+                    2 => Target::Time.id(),
+                    18 => Target::Color.id(),
+                    n => format!("option-{n}"),
+                },
+            )
+        } else {
+            (LIST, self.active.id())
+        };
+        Task::batch([
+            self.focus(),
+            Task::widget(super::reveal::Reveal::new(scroll, target)),
+        ])
     }
     pub fn selection(&self) -> Option<String> {
         self.editor(self.active)
@@ -233,6 +280,14 @@ impl State {
     }
     pub fn set_active(&mut self, target: Target) {
         self.active = target;
+        if let Some(o) = &mut self.options {
+            match target {
+                Target::Date => o.focus = 1,
+                Target::Time => o.focus = 2,
+                Target::Color => o.focus = 18,
+                _ => (),
+            }
+        }
     }
     fn item_id(&self) -> u64 {
         match self.active {
@@ -287,15 +342,7 @@ impl State {
         }
     }
     fn edit(&mut self, target: Target, action: text_editor::Action) {
-        self.active = target;
-        if let Some(o) = &mut self.options {
-            match target {
-                Target::Date => o.focus = 1,
-                Target::Time => o.focus = 2,
-                Target::Color => o.focus = 18,
-                _ => (),
-            }
-        }
+        self.set_active(target);
         let Some(c) = self.editor_mut(target) else {
             return;
         };
@@ -348,7 +395,7 @@ impl State {
                 let parent = sub.then(|| self.item_id());
                 self.options = None;
                 self.new_item(parent, String::new());
-                return self.focus();
+                return self.focus_and_reveal();
             }
             Message::Split(id) => {
                 if let Some(i) = self.board.index(id) {
@@ -376,7 +423,7 @@ impl State {
                     self.board.completed_last();
                     self.sync();
                     self.revision += 1;
-                    return self.focus();
+                    return self.focus_and_reveal();
                 }
             }
             Message::Remove(id) => {
@@ -394,13 +441,13 @@ impl State {
                     );
                     self.sync();
                     self.revision += 1;
-                    return self.focus();
+                    return self.focus_and_reveal();
                 }
             }
             Message::Toggle(id) => {
                 self.board.toggle_done(id, &self.today);
                 self.revision += 1;
-                return self.focus();
+                return self.focus_and_reveal();
             }
             Message::Fold(id) => {
                 if !self.folded.remove(&id) {
@@ -412,7 +459,7 @@ impl State {
                 if self.board.indent(id, out) {
                     self.revision += 1;
                 }
-                return self.focus();
+                return self.focus_and_reveal();
             }
             Message::Move(id, down) => {
                 if let Some(i) = self.board.index(id) {
@@ -430,7 +477,7 @@ impl State {
                         }
                     }
                 }
-                return self.focus();
+                return self.focus_and_reveal();
             }
             Message::Options(id) => {
                 if let Some(i) = self.board.index(id) {
@@ -449,17 +496,18 @@ impl State {
                             &t.color.as_ref().map_or(String::new(), |c| color_hex(c)),
                         ),
                         focus: 1,
+                        offset: scrollable::AbsoluteOffset::default(),
                         error: None,
                     });
                     self.active = Target::Date;
-                    return self.focus();
+                    return self.focus_and_reveal();
                 }
             }
             Message::CloseOptions => {
                 let id = self.options_item();
                 self.options = None;
                 self.active = Target::Item(id);
-                return self.focus();
+                return operation::scroll_to(LIST, self.offset).chain(self.focus_and_reveal());
             }
             Message::Daily => {
                 let id = self.options_item();
@@ -536,8 +584,8 @@ impl State {
                     };
                     if let Some(target) = target {
                         self.active = target;
-                        return self.focus();
                     }
+                    return self.focus_and_reveal();
                 }
             }
             Message::Activate => {
@@ -566,12 +614,12 @@ impl State {
                         value.replace(['\r', '\n'], " "),
                     ))),
                 );
-                return self.focus();
+                return self.focus_and_reveal();
             }
             Message::Pasted(None) => (),
             Message::SelectAll => {
                 self.edit(self.active, text_editor::Action::SelectAll);
-                return self.focus();
+                return self.focus_and_reveal();
             }
             Message::DeleteWord(target, forward) => {
                 self.active = target;
@@ -620,6 +668,14 @@ impl State {
                 self.drop = None;
             }
             Message::Scroll(v) => self.offset = v.absolute_offset(),
+            Message::OptionsScroll(v) => {
+                if let Some(o) = &mut self.options {
+                    o.offset = v.absolute_offset();
+                }
+            }
+            Message::ScrollTo(id, y) => {
+                return operation::scroll_to(id, scrollable::AbsoluteOffset { x: 0., y })
+            }
             Message::Tick => {
                 let day = Local::now().format("%Y-%m-%d").to_string();
                 if day != self.today {
@@ -985,11 +1041,14 @@ impl State {
     }
     fn option_button<'a>(&'a self, label: &'a str, focus: u8) -> Element<'a, Message> {
         let focused = self.options.as_ref().is_some_and(|o| o.focus == focus);
-        button(text(label).size(13))
-            .padding([6, 9])
-            .on_press_maybe(self.option_action(focus))
-            .style(move |theme, status| focus_style(theme, status, focused))
-            .into()
+        container(
+            button(text(label).size(13))
+                .padding([6, 9])
+                .on_press_maybe(self.option_action(focus))
+                .style(move |theme, status| focus_style(theme, status, focused)),
+        )
+        .id(format!("option-{focus}"))
+        .into()
     }
     fn options_view(&self) -> Element<'_, Message> {
         let o = self.options.as_ref().unwrap();
@@ -1035,30 +1094,33 @@ impl State {
                 let focused = o.focus == focus;
                 let color = hex_color(hex);
                 let action = Message::Color(Some((*marker).into()));
-                button(
-                    container(
-                        text(if selected { "✓" } else { "" })
-                            .size(14)
-                            .color(Color::from_rgb8(20, 20, 20)),
+                container(
+                    button(
+                        container(
+                            text(if selected { "✓" } else { "" })
+                                .size(14)
+                                .color(Color::from_rgb8(20, 20, 20)),
+                        )
+                        .center(26),
                     )
-                    .center(26),
+                    .on_press(action)
+                    .padding(2)
+                    .style(move |theme, status| {
+                        let mut s = focus_style(theme, status, focused);
+                        s.background = Some(color.into());
+                        s.border = Border {
+                            color: if selected || focused {
+                                fg(theme)
+                            } else {
+                                Color::TRANSPARENT
+                            },
+                            width: if selected || focused { 2. } else { 0. },
+                            radius: 5.into(),
+                        };
+                        s
+                    }),
                 )
-                .on_press(action)
-                .padding(2)
-                .style(move |theme, status| {
-                    let mut s = focus_style(theme, status, focused);
-                    s.background = Some(color.into());
-                    s.border = Border {
-                        color: if selected || focused {
-                            fg(theme)
-                        } else {
-                            Color::TRANSPARENT
-                        },
-                        width: if selected || focused { 2. } else { 0. },
-                        radius: 5.into(),
-                    };
-                    s
-                })
+                .id(format!("option-{focus}"))
                 .into()
             }))
             .spacing(8);
@@ -1081,7 +1143,11 @@ impl State {
             ]
             .spacing(8),
         );
-        scrollable(body).height(Fill).into()
+        scrollable(body)
+            .id(OPTIONS)
+            .on_scroll(Message::OptionsScroll)
+            .height(Fill)
+            .into()
     }
 }
 
