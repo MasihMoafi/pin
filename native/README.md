@@ -1,58 +1,71 @@
-# Native Pin and Sticky Notes
+# Pin and Sticky Notes
 
-Two small Linux windows share one Rust executable and the system's GTK 4
-text controls. Each runs as one process, without a browser runtime. Pin reads
-the existing Markdown list and `~/.config/Pin/settings.json`.
+Two floating Linux windows share a Rust executable and use the system WebKit
+WebView. Their interface uses shadcn/ui components and Lucide icons. There is
+no bundled browser runtime. Pin reads the existing Markdown list and
+`~/.config/Pin/settings.json`.
 
 Run `pin-native` for priorities, or `pin-native --notes` for a plain text
 scratch pad. Both windows resize, remember their bounds, and can be pinned
-above other windows. The launcher uses X11 (including XWayland) for pinning.
-Install a verified build with `python3 native/install.py /path/to/pin-native`
-from the repository root. It adds both apps to your menu and updates Pin's
-existing login entry if enabled.
+above other windows. Install a verified build from the repository root:
 
-In Pin, open a task's **⋮ → Repeat daily**. Checking it completes today's
+```sh
+python3 native/install.py /path/to/pin-native
+```
+
+It adds both apps to the menu and updates Pin's existing login entry if enabled.
+The Notes icon uses Pin's cream tile and tilted dark silhouette. Each app
+follows the desktop light/dark preference, including changes while open.
+
+In Pin, open a task's **⋯ → Repeat daily**. Checking it completes today's
 occurrence. It becomes unfinished on the next local date, including when Pin
 is closed overnight. A dated task keeps its time and advances to the new day.
 The Markdown suffix is `🔁 daily`; completed daily tasks also store
 `✅ YYYY-MM-DD`. Regular tasks keep their current behavior.
 
-Ctrl+Z undoes typing and task changes; Ctrl+Shift+Z or Ctrl+Y redoes them.
+Both apps have Undo, Redo and Save buttons. Ctrl+Z undoes typing and task
+changes; Ctrl+Shift+Z or Ctrl+Y redoes them. Ctrl+S saves immediately. The
+shortcuts use physical key positions so they work with English and Persian
+layouts. Typing is grouped by pauses; task actions are separate undo steps.
+
 Ctrl+N adds a task, Ctrl+T adds a subtask, Ctrl+Enter completes it, Ctrl+D opens
 its options, and Ctrl+Shift+Backspace deletes it. Enter splits a task, Tab and
 Shift+Tab change its level, and Alt+↑ / Alt+↓ reorder it. Only the grip starts
-a mouse drag. The options also contain the color palette, date and delete.
+a mouse drag. Options also contain the color palette, date and delete.
+Task rows grow with their text and wrap when the window becomes narrower.
 
 Sticky Notes saves to `Documents/Sticky Notes.txt`, using the desktop's
 Documents folder setting. Set `STICKY_NOTES_FILE`, or `file` in
 `~/.config/StickyNotes/settings.json`, to choose another location. It is a
-continuous scratch pad with standard selection, clipboard, context menu and
-undo. Notes stay private on this machine. Window settings live in each app's
-`native.json` configuration file.
+continuous scratch pad with standard selection, clipboard and a context menu.
+Window settings live in each app's `native.json` configuration file.
 
-Both apps save atomically and watch the file. Concurrent changes pause
+Both apps save automatically and atomically. Concurrent file changes pause
 saving until you choose **Use disk** or **Keep mine**. A cooperating second
 writer uses the same lock; other editors must still coordinate simultaneous
-saves. The existing Electron version does not understand recurrence markers;
-use the native app to edit daily tasks.
+saves. The older Electron releases do not understand recurrence markers;
+use the Rust app to edit daily tasks.
 
 ## Build and verify
 
-Requires Rust and GTK 4.8 or newer (`libgtk-4-dev` on Ubuntu). The release
-workflow builds on GitHub Actions. To build on another development machine:
+Requires Rust, Node.js 22 or newer, GTK 3 and WebKitGTK 4.1 development files.
+See [Tauri's Linux prerequisites](https://tauri.app/start/prerequisites/#linux).
+The release workflow builds on GitHub Actions.
 
 ```sh
-cargo fmt --check
-cargo test --no-default-features
-cargo clippy --all-targets -- -D warnings
-cargo build --release
+npm --prefix native/ui ci
+npm --prefix native/ui run build
+cargo fmt --manifest-path native/Cargo.toml --check
+cargo test --manifest-path native/Cargo.toml --no-default-features
+cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
+cargo build --manifest-path native/Cargo.toml --release
 ```
 
-`test/desktop.py` drives the actual app with isolated files on a hidden X11
-display. It checks text undo/redo, daily tasks, task changes, file conflicts
-and resizing. It requires GTK 4 introspection, AT-SPI, Xvfb, an X11 window
-manager, xdotool, xprop, xclip and Pillow. With the hidden display and its
-window manager running, run it in an isolated D-Bus session:
+`native/test/desktop.py` drives the real executable on a hidden X11 display.
+It checks physical English/Persian shortcuts, toolbar actions, task wrapping
+at three widths, recurrence, file conflicts, pinning and window persistence.
+Requires AT-SPI introspection, Xvfb, an X11 window manager, xdotool, xprop,
+setxkbmap and Pillow. Run with the hidden display and window manager active:
 
 ```sh
 DISPLAY=:94 dbus-run-session -- /usr/bin/python3 -I native/test/desktop.py /path/to/pin-native /path/to/screenshots
