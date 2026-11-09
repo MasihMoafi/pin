@@ -314,7 +314,7 @@ pub fn run() {
                     .transparent(true)
                     .resizable(true)
                     .always_on_top(settings.pinned.unwrap_or(true))
-                    .visible(false)
+                    .visible(true)
                     .build()?;
             resize_background(&window, app.state::<Shared>().dark.load(Ordering::Relaxed));
             let icon = tauri::image::Image::from_bytes(if notes {
