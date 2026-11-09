@@ -1,0 +1,30 @@
+[package]
+name = "pin-native"
+version = "0.3.0"
+edition = "2021"
+license = "MIT"
+description = "Native floating priorities and scratch notes"
+
+[features]
+default = ["desktop"]
+desktop = ["dep:gtk", "dep:x11rb"]
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+fs2 = "0.4"
+gtk = { package = "gtk4", version = "=0.10.3", optional = true, features = ["v4_8"] }
+x11rb = { version = "0.13", optional = true }
+
+[[bin]]
+name = "pin-native"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
