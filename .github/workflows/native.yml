@@ -26,3 +26,7 @@ jobs:
         with:
           name: pin-native-linux
           path: native/target/release/pin-native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pin-native-lock
+          path: native/Cargo.lock

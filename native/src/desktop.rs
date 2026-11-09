@@ -41,6 +41,14 @@ struct Snapshot {
     selection: Option<Selection>,
 }
 
+#[derive(Clone)]
+struct NoteSnapshot {
+    text: String,
+    caret: i32,
+    anchor: i32,
+    scroll: f64,
+}
+
 struct State {
     board: Board,
     disk: Option<String>,
@@ -55,6 +63,10 @@ struct State {
     redo: Vec<Snapshot>,
     typing: Option<(u64, Instant)>,
     before_selection: Option<Selection>,
+    note_undo: Vec<NoteSnapshot>,
+    note_redo: Vec<NoteSnapshot>,
+    before_note: Option<NoteSnapshot>,
+    note_previous: String,
     settings: Settings,
 }
 
@@ -278,7 +290,11 @@ impl App {
             .build();
         note.add_css_class("scratch");
         note.buffer().set_text(&clean);
-        note.buffer().set_enable_undo(true);
+        note.buffer().set_enable_undo(false);
+        let note_menu = gio::Menu::new();
+        note_menu.append(Some("Undo"), Some("win.undo"));
+        note_menu.append(Some("Redo"), Some("win.redo"));
+        note.set_extra_menu(Some(&note_menu));
         if notes {
             scroller.set_child(Some(&note));
         } else {
@@ -309,6 +325,7 @@ impl App {
             state: RefCell::new(State {
                 board,
                 disk,
+                note_previous: clean.clone(),
                 clean,
                 conflict: false,
                 readable,
@@ -320,6 +337,9 @@ impl App {
                 redo: Vec::new(),
                 typing: None,
                 before_selection: None,
+                note_undo: Vec::new(),
+                note_redo: Vec::new(),
+                before_note: None,
                 settings,
             }),
             loading: Cell::new(false),
@@ -363,11 +383,16 @@ impl App {
         keys.connect_key_pressed(move |_, key, _, modifiers| a.global_key(key, modifiers));
         this.window.add_controller(keys);
         let a = this.clone();
-        this.note.buffer().connect_changed(move |_| {
+        this.note.buffer().connect_begin_user_action(move |_| {
             if !a.loading.get() {
-                a.state.borrow_mut().dirty_at = Instant::now();
+                let before = a.note_snapshot();
+                a.state.borrow_mut().before_note = Some(before);
             }
         });
+        let a = this.clone();
+        this.note
+            .buffer()
+            .connect_changed(move |_| a.note_changed());
         let a = this.clone();
         this.use_disk.connect_clicked(move |_| a.load_latest(true));
         let a = this.clone();
@@ -458,6 +483,46 @@ impl App {
         }
     }
 
+    fn note_snapshot(&self) -> NoteSnapshot {
+        let buffer = self.note.buffer();
+        NoteSnapshot {
+            text: buffer
+                .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                .to_string(),
+            caret: buffer.cursor_position(),
+            anchor: buffer.iter_at_mark(&buffer.selection_bound()).offset(),
+            scroll: self.scroller.vadjustment().value(),
+        }
+    }
+
+    fn note_changed(&self) {
+        if self.loading.get() {
+            return;
+        }
+        let now = self.note_snapshot();
+        let mut s = self.state.borrow_mut();
+        if now.text == s.note_previous {
+            return;
+        }
+        if !s
+            .typing
+            .is_some_and(|(_, at)| at.elapsed() < Duration::from_millis(600))
+        {
+            let before = s.before_note.take().unwrap_or_else(|| NoteSnapshot {
+                text: s.note_previous.clone(),
+                ..now.clone()
+            });
+            s.note_undo.push(before);
+            if s.note_undo.len() > 300 {
+                s.note_undo.remove(0);
+            }
+            s.note_redo.clear();
+        }
+        s.note_previous = now.text;
+        s.typing = Some((0, Instant::now()));
+        s.dirty_at = Instant::now();
+    }
+
     fn change(self: &Rc<Self>, focus: Option<Selection>, f: impl FnOnce(&mut State)) {
         let before = self.snapshot();
         let mut s = self.state.borrow_mut();
@@ -478,14 +543,37 @@ impl App {
 
     fn history(self: &Rc<Self>, redo: bool) {
         if self.notes {
-            let buffer = self.note.buffer();
+            let current = self.note_snapshot();
+            let mut s = self.state.borrow_mut();
+            let next = if redo {
+                s.note_redo.pop()
+            } else {
+                s.note_undo.pop()
+            };
+            let Some(next) = next else {
+                return;
+            };
             if redo {
-                if buffer.can_redo() {
-                    buffer.redo();
-                }
-            } else if buffer.can_undo() {
-                buffer.undo();
+                s.note_undo.push(current);
+            } else {
+                s.note_redo.push(current);
             }
+            s.typing = None;
+            s.note_previous = next.text.clone();
+            s.dirty_at = Instant::now();
+            drop(s);
+            self.loading.set(true);
+            let buffer = self.note.buffer();
+            buffer.set_text(&next.text);
+            let max = buffer.char_count();
+            buffer.select_range(
+                &buffer.iter_at_offset(next.caret.clamp(0, max)),
+                &buffer.iter_at_offset(next.anchor.clamp(0, max)),
+            );
+            self.note.grab_focus();
+            let adjustment = self.scroller.vadjustment();
+            glib::idle_add_local_once(move || adjustment.set_value(next.scroll));
+            self.loading.set(false);
             return;
         }
         let current = self.snapshot();
@@ -1365,6 +1453,14 @@ impl App {
         }
         if let Some(xid) = self.xid() {
             if let Ok((conn, screen)) = x11rb::connect(None) {
+                if !self.window.is_maximized() {
+                    if let Ok(cookie) = conn.get_geometry(xid) {
+                        if let Ok(geometry) = cookie.reply() {
+                            s.settings.width = i32::from(geometry.width);
+                            s.settings.height = i32::from(geometry.height);
+                        }
+                    }
+                }
                 if let Ok(cookie) =
                     conn.translate_coordinates(xid, conn.setup().roots[screen].root, 0, 0)
                 {
