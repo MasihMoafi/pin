@@ -671,7 +671,10 @@ impl App {
         let s = self.state.borrow();
         let dark =
             gtk::Settings::default().is_some_and(|s| s.is_gtk_application_prefer_dark_theme());
-        let mut css = String::from(".pin-window { background: @theme_bg_color; } textview.task, textview.task text { background: transparent; } textview { font-size: 15px; } .task-row { border-radius: 6px; padding: 5px 4px; } .task-row button { min-width: 20px; min-height: 22px; padding: 0 3px; } .task-row.done textview { opacity: 0.6; } .task-row.drop-before { border-top: 2px solid @theme_selected_bg_color; } .task-row.drop-after { border-bottom: 2px solid @theme_selected_bg_color; } .when { font-size: 11px; opacity: 0.8; } .today { color: #16a34a; } .late { color: #dc2626; } .grip { opacity: 0.5; } .scratch, .scratch text { background: @theme_base_color; }");
+        let mut css = String::from(".pin-window { background: @theme_bg_color; } textview.task, textview.task text { background: transparent; } textview { font-size: 15px; } .task-row { border-radius: 6px; padding: 5px 4px; } .task-row button { min-width: 20px; min-height: 22px; padding: 0 3px; } .task-row.done textview { opacity: 0.6; } .task-row.drop-before { border-top: 2px solid @theme_selected_bg_color; } .task-row.drop-after { border-bottom: 2px solid @theme_selected_bg_color; } .when { font-size: 11px; opacity: 0.8; } .today { color: #17633a; } .late { color: #a5221b; } .grip { opacity: 0.5; } .scratch, .scratch text { background: @theme_base_color; }");
+        if dark {
+            css.push_str(".today { color: #90d9aa; } .late { color: #ffaaa4; }");
+        }
         for task in &s.board.tasks {
             if let Some(color) = task.color.as_deref().and_then(|c| {
                 COLORS
@@ -1193,7 +1196,7 @@ impl App {
                 let dest = s.board.end(i);
                 s.board.tasks.insert(dest, new);
             });
-        } else if key == gdk::Key::Tab || key == gdk::Key::ISO_Left_Tab {
+        } else if !ctrl && (key == gdk::Key::Tab || key == gdk::Key::ISO_Left_Tab) {
             let focus = self.selection();
             self.change(focus, |s| {
                 s.board.indent(id, shift || key == gdk::Key::ISO_Left_Tab);
@@ -1313,6 +1316,9 @@ impl App {
             buffer.delete(&mut buffer.start_iter(), &mut buffer.end_iter());
             buffer.insert(&mut buffer.start_iter(), &new);
             buffer.end_user_action();
+            if explicit {
+                self.note.grab_focus();
+            }
         } else {
             if explicit {
                 let before = Snapshot {
