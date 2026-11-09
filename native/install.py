@@ -23,7 +23,7 @@ for name, notes in [("pin-native", False), ("sticky-notes", True)]:
     launcher = home / ".local/bin" / name
     launcher.parent.mkdir(parents=True, exist_ok=True)
     launcher.write_text("#!/bin/sh\nexec env GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 "
-                        + shlex.quote(str(binary)) + (" --notes" if notes else "") + "\n")
+                        + shlex.quote(str(binary)) + (" --notes" if notes else "") + ' "$@"\n')
     launcher.chmod(0o755)
     desktop = ("[Desktop Entry]\nType=Application\n"
                f"Name={'Sticky Notes' if notes else 'Pin'}\n"
