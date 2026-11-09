@@ -271,6 +271,9 @@ try:
     result = {"checks": checks, "memory": usage, "binary_bytes": Path(binary).stat().st_size}
     (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)
+except BaseException:
+    shot("failure")
+    raise
 finally:
     for child in reversed(children):
         if child.poll() is None:

@@ -812,6 +812,7 @@ impl App {
             s.dirty_at = Instant::now();
         });
         let keys = gtk::EventControllerKey::new();
+        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
         let a = self.clone();
         keys.connect_key_pressed(move |_, key, _, modifiers| a.task_key(id, key, modifiers));
         text.add_controller(keys);
