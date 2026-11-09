@@ -60,8 +60,6 @@ enum Message {
     Activate,
     MenuMove(i8),
     DeleteWord(bool),
-    Theme(iced::theme::Mode),
-    FramePresented,
 }
 
 struct Snapshot {
@@ -220,7 +218,6 @@ impl Notes {
 
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            iced::system::theme_changes().map(Message::Theme),
             iced::time::every(
                 if self.save_at.is_some() || self.saved_at.is_some() || self.error.is_some() {
                     Duration::from_millis(250)
@@ -236,10 +233,6 @@ impl Notes {
                     | window::Event::Resized(_)
                     | window::Event::CloseRequested),
                 ) => Some(Message::Window(id, e)),
-                #[cfg(target_os = "linux")]
-                Event::Window(window::Event::RedrawRequested(_)) if pin_native::x11::pending() => {
-                    Some(Message::FramePresented)
-                }
                 Event::Mouse(mouse::Event::CursorMoved { position }) => {
                     Some(Message::Pointer(position))
                 }
@@ -482,11 +475,33 @@ impl Notes {
                         } else {
                             Task::none()
                         };
-                        return Task::batch([
-                            level,
-                            placement,
-                            iced::system::theme().map(Message::Theme),
-                        ]);
+                        let surface = window::run(id, |handle| {
+                            #[cfg(target_os = "linux")]
+                            if let (Ok(window), Ok(display)) =
+                                (handle.window_handle(), handle.display_handle())
+                            {
+                                use window::raw_window_handle::{
+                                    RawDisplayHandle, RawWindowHandle,
+                                };
+                                if let (
+                                    RawWindowHandle::Xlib(window),
+                                    RawDisplayHandle::Xlib(display),
+                                ) = (window.as_raw(), display.as_raw())
+                                {
+                                    if let Some(display) = display.display {
+                                        // Iced runs this on the window's event-loop thread.
+                                        unsafe {
+                                            pin_native::x11::retain_contents(
+                                                display.as_ptr(),
+                                                window.window,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .discard();
+                        return Task::batch([level, placement, surface]);
                     }
                     window::Event::Moved(p) => {
                         self.bounds.x = Some(p.x);
@@ -506,46 +521,6 @@ impl Notes {
                 self.bounds.y = Some(position.y);
                 self.preferences();
                 return window::move_to(id, position);
-            }
-            Message::Theme(mode) => {
-                if let Some(id) = self.window {
-                    let dark = std::env::var("ICED_THEME")
-                        .map_or(mode == iced::theme::Mode::Dark, |name| name == "Dark");
-                    return window::run(id, move |handle| {
-                        #[cfg(target_os = "linux")]
-                        if let (Ok(window), Ok(display)) =
-                            (handle.window_handle(), handle.display_handle())
-                        {
-                            use window::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
-                            if let (
-                                RawWindowHandle::Xlib(window),
-                                RawDisplayHandle::Xlib(display),
-                            ) = (window.as_raw(), display.as_raw())
-                            {
-                                if let Some(display) = display.display {
-                                    // Iced runs this closure on the window's event-loop thread.
-                                    unsafe {
-                                        pin_native::x11::retain_contents(
-                                            display.as_ptr(),
-                                            window.window,
-                                            dark,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    })
-                    .discard();
-                }
-            }
-            Message::FramePresented => {
-                if let Some(id) = self.window {
-                    return window::run(id, |_| {
-                        #[cfg(target_os = "linux")]
-                        pin_native::x11::frame_presented();
-                    })
-                    .discard();
-                }
             }
             Message::Drag => {
                 if let Some(id) = self.window {
