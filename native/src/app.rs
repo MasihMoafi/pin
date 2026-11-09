@@ -1353,6 +1353,33 @@ mod tests {
     }
 
     #[test]
+    fn loading_an_external_completed_daily_task_schedules_its_reopened_version_for_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Pin.md");
+        let external = "- [x] Daily 📅 2000-01-01 09:30 🔁 daily ✅ 2000-01-01\n- [x] One-off\n";
+        std::fs::write(&file, external).unwrap();
+        let mut app = Notes::new(
+            file.clone(),
+            dir.path().join("iced.json"),
+            Bounds::default(),
+            Some("- [ ] Local edit\n".into()),
+        );
+        app.board = Some(pin::State::new("- [ ] Local edit\n", &[]));
+        app.conflict = true;
+        let _ = app.update(Message::UseDisk);
+        assert!(
+            app.dirty,
+            "Rollover must reach the file as well as the task view"
+        );
+        assert!(app.save(false));
+        let day = chrono::Local::now().format("%Y-%m-%d").to_string();
+        assert_eq!(
+            std::fs::read_to_string(file).unwrap(),
+            format!("- [ ] Daily 📅 {day} 09:30 🔁 daily\n- [x] One-off\n")
+        );
+    }
+
+    #[test]
     fn typed_phrase_and_selected_delete_share_toolbar_history() {
         let mut n = note("سلام\nA first note.\n");
         let before = n.content.text();
