@@ -151,6 +151,7 @@ fn main() -> iced::Result {
         // Resolve stored physical/logical coordinates against the real display after opening.
         position: window::Position::Centered,
         decorations: false,
+        transparent: true,
         level: if bounds.pinned.unwrap_or(true) {
             window::Level::AlwaysOnTop
         } else {
