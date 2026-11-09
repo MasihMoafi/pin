@@ -7,6 +7,9 @@ the existing Markdown list and `~/.config/Pin/settings.json`.
 Run `pin-native` for priorities, or `pin-native --notes` for a plain text
 scratch pad. Both windows resize, remember their bounds, and can be pinned
 above other windows. The launcher uses X11 (including XWayland) for pinning.
+Install a verified build with `python3 native/install.py /path/to/pin-native`
+from the repository root. It adds both apps to your menu and updates Pin's
+existing login entry if enabled.
 
 In Pin, open a task's **⋮ → Repeat daily**. Checking it completes today's
 occurrence. It becomes unfinished on the next local date, including when Pin

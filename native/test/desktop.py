@@ -64,18 +64,9 @@ def walk(node=None):
 
 
 def activate(name):
-    def attempt():
-        for node in walk():
-            try:
-                if node.get_name() == name:
-                    action = node.get_action_iface()
-                    if action and action.get_n_actions() and action.do_action(0):
-                        return True
-            except Exception:
-                pass
-        return False
-    wait_for(attempt, f"Activate {name}")
-    time.sleep(0.2)
+    assert name in ("Keep mine", "Use disk")
+    wait_for(lambda: seen(name), f"Find {name}")
+    click(wid, 125 if name == "Keep mine" else 45, 100)
 
 
 def seen(name):
@@ -105,6 +96,7 @@ def start(notes):
 
 
 def click(wid, px, py):
+    time.sleep(0.15)  # Let GTK allocate widgets after a structural change.
     x("mousemove", "--window", wid, px, py, "click", 1)
     time.sleep(0.1)
 
@@ -122,7 +114,7 @@ def geometry(wid):
 
 
 def close(proc):
-    activate("Close")
+    click(wid, int(geometry(wid)["WIDTH"]) - 25, 26)
     proc.wait(timeout=8)
     assert proc.returncode == 0
 
@@ -146,6 +138,14 @@ def check(label):
 
 try:
     proc, wid = start(False)
+    def pinned():
+        return "_NET_WM_STATE_ABOVE" in subprocess.check_output(["xprop", "-id", wid, "_NET_WM_STATE"], env=env, text=True)
+    wait_for(pinned, "Window did not pin above others")
+    click(wid, 25, 26)
+    wait_for(lambda: not pinned(), "Unpin did not clear the above state")
+    click(wid, 25, 26)
+    wait_for(pinned, "Pin toggle did not restore the above state")
+    check("Pin and unpin change the real window manager state")
     wait_for(lambda: "- [ ] Yesterday 🔁 daily" in list_file.read_text(), "Daily rollover")
     baseline = list_file.read_text()
     check("Daily task reopens after an overnight restart")
@@ -182,7 +182,9 @@ try:
     check("Backspace removes an empty task without a crash")
     click(wid, 130, 75)
     key("ctrl+d")
-    activate("Repeat daily")
+    time.sleep(0.2)
+    shot("options")
+    key("space")
     wait_for(lambda: "Daily task== 📅" in list_file.read_text() and list_file.read_text().count("🔁 daily") == 1,
              "Daily option did not change")
     key("ctrl+z")
@@ -196,14 +198,15 @@ try:
     saved(list_file, baseline)
     check("Task paste preserves a single Markdown line")
     x("windowsize", wid, 350, 420)
+    x("windowmove", wid, 40, 60)
     time.sleep(0.4)
     shot("pin-narrow")
     before = geometry(wid)
     close(proc)
     proc, wid = start(False)
     after = geometry(wid)
-    assert before["WIDTH"] == after["WIDTH"] and before["HEIGHT"] == after["HEIGHT"], (before, after)
-    check("Pin restores its resized window exactly")
+    assert all(before[k] == after[k] for k in ("WIDTH", "HEIGHT", "X", "Y")), (before, after)
+    check("Pin restores its window size and position exactly")
     close(proc)
 
     proc, wid = start(True)
@@ -237,6 +240,7 @@ try:
     wait_for(lambda: seen("Use disk"), "Conflict prompt missing")
     activate("Keep mine")
     saved(note_file, initial_note + "Unsaved local text")
+    click(wid, 140, 100)
     note_file.write_text("Disk version\n")
     wait_for(lambda: seen("Use disk"), "Second conflict prompt missing")
     activate("Use disk")
@@ -259,10 +263,12 @@ try:
     close(proc)
     proc, wid = start(True)
     after = geometry(wid)
-    assert before["WIDTH"] == after["WIDTH"] and before["HEIGHT"] == after["HEIGHT"], (before, after)
+    assert all(before[k] == after[k] for k in ("WIDTH", "HEIGHT", "X", "Y")), (before, after)
     saved(note_file, "Disk version\nLoaded")
     check("Notes retains text and window size after closing and reopening")
     usage = {}
+    assert not Path(f"/proc/{proc.pid}/task/{proc.pid}/children").read_text().strip(), "App spawned a child process"
+    assert Path(binary).stat().st_size < 10 * 1024 * 1024, "Native executable exceeds 10 MiB"
     for line in Path(f"/proc/{proc.pid}/smaps_rollup").read_text().splitlines():
         if line.startswith(("Rss:", "Pss:")):
             k, v = line.split(":", 1)

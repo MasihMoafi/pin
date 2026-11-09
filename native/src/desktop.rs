@@ -366,7 +366,28 @@ impl App {
             a.save_settings();
         });
         let a = this.clone();
-        this.window.connect_map(move |_| a.restore_window());
+        let initial_map = Cell::new(true);
+        this.window.connect_map(move |_| {
+            if !initial_map.replace(false) {
+                return;
+            }
+            // The window manager must have handled MapRequest before EWMH changes.
+            let weak = Rc::downgrade(&a);
+            let started = Instant::now();
+            glib::timeout_add_local(Duration::from_millis(50), move || {
+                let Some(app) = weak.upgrade() else {
+                    return glib::ControlFlow::Break;
+                };
+                if !app.window.is_visible()
+                    || app.restore_window()
+                    || started.elapsed() > Duration::from_secs(5)
+                {
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
+            });
+        });
         let a = this.clone();
         this.window.connect_close_request(move |_| {
             a.save_settings();
@@ -1407,14 +1428,39 @@ impl App {
         let _ = conn.flush();
     }
 
-    fn restore_window(&self) {
-        self.set_top(self.state.borrow().settings.pinned.unwrap_or(true));
+    fn restore_window(&self) -> bool {
         let Some(xid) = self.xid() else {
-            return;
+            return true;
         };
         let Ok((conn, screen)) = x11rb::connect(None) else {
-            return;
+            return true;
         };
+        let managed = (|| {
+            let state = conn
+                .intern_atom(false, b"WM_STATE")
+                .ok()?
+                .reply()
+                .ok()?
+                .atom;
+            let reply = conn
+                .get_property(
+                    false,
+                    xid,
+                    state,
+                    x11rb::protocol::xproto::AtomEnum::ANY,
+                    0,
+                    2,
+                )
+                .ok()?
+                .reply()
+                .ok()?;
+            Some(reply.format != 0)
+        })()
+        .unwrap_or(false);
+        if !managed {
+            return false;
+        }
+        self.set_top(self.state.borrow().settings.pinned.unwrap_or(true));
         let s = self.state.borrow();
         let root = &conn.setup().roots[screen];
         let width = self
@@ -1444,6 +1490,7 @@ impl App {
                 .height(height as u32),
         );
         let _ = conn.flush();
+        true
     }
 
     fn save_settings(&self) {

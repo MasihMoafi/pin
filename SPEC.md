@@ -1,7 +1,9 @@
 # Pin: spec
 
 An always-on-top priority note. Standard app behavior (undo, text selection, windows, aligned layout) is assumed;
-this file lists only what is particular to Pin. Code is TypeScript (`src/`), built to `dist/`.
+this file lists only what is particular to Pin. The native Rust apps live in `native/`;
+[native/README.md](native/README.md) covers daily tasks, Sticky Notes and native verification.
+The original TypeScript implementation (`src/`, built to `dist/`) remains for existing releases.
 
 ## Data
 - One Markdown file: `$PRIORITIES_FILE`, else `file` in `~/.config/Pin/settings.json`, else `Documents/Pin.md`.
