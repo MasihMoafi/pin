@@ -15,20 +15,24 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
   unique temporary file and preserve a list-file symlink.
 
 ## Window
+- Both apps use shadcn/ui components and Lucide icons in a system WebView, with Rust handling files and windows.
+- Sticky Notes uses Pin's cream icon tile and tilted dark silhouette, and remembers its resizable window.
 - Floats on top; the header pin (Lucide's, as in Elpis) is filled in its own color while pinned, outline when not.
 - Opens on the right of the screen the first time; starts at log-in (`~/.config/autostart/pin.desktop`).
 - App icon: the tilted pin in `logo/` (approved 7 Nov), on a light tile.
 - Follow the desktop light/dark preference live, including menus, fields and task colors.
 
 ## Tasks
+- Task text wraps and grows vertically at every window width; no line may be clipped.
+- The task options offer daily recurrence; completed daily tasks reopen on the next local date, preserving any time.
 - Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
   Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
-- Each row on hover: + (subtask), trash (delete), ⋯ (color, date, subtask, delete).
+- Each row has a checkbox, text and ⋯ (daily recurrence, color, date, subtask, delete).
 - A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
-  away (also Ctrl+. and the ⋯ menu); the folded tasks are remembered on this computer, never written to the file.
+  away (also Ctrl+.); the folded tasks are remembered on this computer, never written to the file.
 - Hotkeys: Ctrl+T subtask, Ctrl+D date, Ctrl+Shift+Backspace delete, Ctrl+Enter done, Alt+↑/↓ move;
   Enter splits at the caret; Tab / Shift+Tab nest and lift; Backspace on an empty task deletes it.
-- The color dot opens twelve colors plus any custom color. A new task takes its neighbor's color.
+- The task options offer twelve colors plus any custom color. A new task takes its neighbor's color.
 - Dates read as Elpis Automations shows them; today is green, past and not done is red.
 
 ## Release
@@ -36,6 +40,10 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
   builds on every push and packages on a `v*` tag. Store text: `SNAP_LISTING.md`.
 
 ## Acceptance
+Both Rust apps provide toolbar Undo, Redo and Save. Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and Ctrl+S call the same actions under English and Persian keyboard layouts. Sticky Notes is a plain text scratch pad.
+
+Drive the Rust executable with `native/test/desktop.py` on a hidden display; see `native/README.md`.
+
 Against the app on a hidden display with `--remote-debugging-port=9377`, run `python3 test/e2e.py <scratch list>`.
 Run `python3 test/sync_e2e.py <scratch list> 9377 <screenshot directory>` for conflicts, reload, theme and contrast;
 it closes the app after checking the last save.
