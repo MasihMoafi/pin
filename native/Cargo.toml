@@ -23,7 +23,7 @@ tauri = { version = "=2.12.5", optional = true, features = ["image-png"] }
 tauri-plugin-single-instance = { version = "2", optional = true }
 tauri-plugin-clipboard-manager = { version = "2", optional = true }
 
-iced = { version = "=0.14.0", optional = true, default-features = false, features = ["tiny-skia", "x11", "tokio", "svg", "linux-theme-detection", "crisp"] }
+iced = { version = "=0.14.0", optional = true, default-features = false, features = ["tiny-skia", "x11", "tokio", "svg", "linux-theme-detection", "crisp", "advanced"] }
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
 
 unicode-segmentation = { version = "1", optional = true }

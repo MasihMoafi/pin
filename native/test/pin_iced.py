@@ -58,6 +58,8 @@ def geometry(wid):
     return {k: int(v) for k, v in (s.split('=', 1) for s in x('getwindowgeometry', '--shell', wid).splitlines())}
 
 def start(label, contents=initial, kind='iced', reuse=False, theme=None):
+    global current_kind
+    current_kind = kind
     case = root / label
     config = case / 'config/Pin'
     config.mkdir(parents=True, exist_ok=True)
@@ -115,9 +117,13 @@ def shot(name):
     return image
 
 def close():
-    click(geometry(wid)['WIDTH'] // scale - 25, 21)
-    p.wait(timeout=8)
-    assert p.returncode == 0
+    if current_kind == 'webview':
+        os.killpg(p.pid, signal.SIGTERM)
+        p.wait(timeout=8)
+    else:
+        click(geometry(wid)['WIDTH'] // scale - 25, 21)
+        p.wait(timeout=8)
+        assert p.returncode == 0
 
 def clipboard(value):
     q = subprocess.Popen(['xclip', '-quiet', '-selection', 'clipboard', '-in'], env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -231,6 +237,29 @@ try:
     saved(f'- [ ] Daily 📅 {today} 09:30 🔁 daily\n- [x] One-off\n')
     close()
     check('Daily tasks reopen after an overnight restart and preserve their time')
+    p, wid, file, _ = start('colors')
+    click(115, 73)
+    x('key', 'ctrl+d')
+    for _ in range(10):
+        x('key', 'Tab')
+    x('key', 'Return')
+    contains('<mark style="background: #ec4899;">First priority</mark>')
+    physical(52)
+    saved(initial)
+    physical(29)
+    contains('#ec4899')
+    for _ in range(7):
+        x('key', 'Tab')
+    x('key', 'ctrl+a')
+    x('type', '--clearmodifiers', '#123456')
+    shot('pin-custom-color')
+    x('key', 'Return')
+    contains('<mark style="background: #123456;">First priority</mark>')
+    physical(52)
+    contains('#ec4899')
+    x('key', 'Escape')
+    close()
+    check('Palette and custom colors work through the keyboard and share undo/redo')
     p, wid, file, _ = start('unicode', '- [ ] First priority\n- [ ] Second priority\n')
     click(115, 73)
     x('key', 'End')
@@ -247,6 +276,76 @@ try:
     assert copied == 'First priority', copied
     check('Plain-text Persian paste and the keyboard context menu preserve selection and undo')
     close()
+    p, wid, file, _ = start('windows')
+    above = lambda: '_NET_WM_STATE_ABOVE' in subprocess.check_output(['xprop', '-id', wid, '_NET_WM_STATE'], env=env, text=True)
+    wait(above, 'Initial pin state')
+    click(379, 21)
+    wait(lambda: not above(), 'Unpin changes the window manager state')
+    click(115, 73)
+    x('key', 'ctrl+period')
+    time.sleep(.2)
+    x('windowsize', wid, 350 * scale, 300 * scale)
+    x('windowmove', wid, 80, 90)
+    time.sleep(.3)
+    bounds = geometry(wid)
+    close()
+    p, wid, file, _ = start('windows', reuse=True)
+    assert all(geometry(wid)[key] == bounds[key] for key in ['WIDTH', 'HEIGHT', 'X', 'Y'])
+    wait(lambda: not above(), 'Unpinned state survives restart')
+    prefs = json.loads((root / 'windows/config/Pin/iced.json').read_text())
+    assert prefs['folded'] == ['First priority'], prefs
+    saved(initial)
+    shot('pin-remembered-window')
+    close()
+    check('Pin/unpin, scaled bounds and folded branches persist after restart')
+    p, wid, file, _ = start('conflicts', '- [ ] First priority\n')
+    click(115, 73)
+    x('key', 'End')
+    x('type', '--clearmodifiers', '--delay', 1, ' local')
+    file.write_text('- [ ] Agent update\n')
+    time.sleep(.9)
+    assert file.read_text() == '- [ ] Agent update\n'
+    shot('pin-conflict')
+    click(128, 92)
+    saved('- [ ] First priority local\n')
+    click(115, 73)
+    x('key', 'End')
+    x('type', '--clearmodifiers', '--delay', 1, ' unsaved')
+    file.write_text('- [ ] Disk version\n')
+    time.sleep(.9)
+    click(45, 92)
+    saved('- [ ] Disk version\n')
+    file.write_text('- [ ] New external version\n')
+    time.sleep(3)
+    click(115, 73)
+    x('key', 'End')
+    x('type', '--clearmodifiers', ' appended')
+    saved('- [ ] New external version appended\n')
+    close()
+    check('Both conflict choices protect local typing and idle reload uses the external list')
+    drag_list = '- [ ] ==🟢Alpha==\n- [ ] ==🔵Beta==\n- [ ] ==🟣Gamma==\n'
+    p, wid, file, _ = start('drag', drag_list)
+    x('mousemove', '--window', wid, 402 * scale, 75 * scale, 'mousedown', '1')
+    x('mousemove', '--window', wid, 150 * scale, 210 * scale)
+    time.sleep(.3)
+    shot('pin-drop-indicator')
+    x('mouseup', '1')
+    saved('- [ ] ==🔵Beta==\n- [ ] ==🟣Gamma==\n- [ ] ==🟢Alpha==\n')
+    physical(52)
+    saved(drag_list)
+    x('mousemove', '--window', wid, 402 * scale, 75 * scale, 'mousedown', '1')
+    x('mousemove', 1, 1)
+    x('mouseup', '1')
+    time.sleep(.4)
+    saved(drag_list)
+    x('mousemove', '--window', wid, 80 * scale, 75 * scale, 'mousedown', '1')
+    x('mousemove', '--window', wid, 150 * scale, 75 * scale, 'mouseup', '1')
+    physical(53)  # Cut the dragged text selection, not a task branch.
+    wait(lambda: file.read_text() != drag_list, 'Dragging text makes a selection')
+    physical(52)
+    saved(drag_list)
+    close()
+    check('Only the grip reorders; drop indication, outside cancellation and text selection work')
     p, wid, file, _ = start('wrapping', wrapped)
     heights = []
     for width in [460, 350, 280]:
@@ -273,14 +372,14 @@ try:
     for repeat in range(4):
         for kind in ['webview', 'iced']:
             p, wid, file, mapped = start(f'{kind}-{repeat}', wrapped, kind=kind)
-            record = dict(usage(p.pid), kind=kind, repeat=repeat, warmup=repeat == 0, mapped_ms=round(mapped, 2))
+            record = dict(usage(p.pid), kind=kind, repeat=repeat, warmup=repeat == 0, mapped_ms=round(mapped, 2), load=list(os.getloadavg()))
             records.append(record)
             print(json.dumps(record), flush=True)
             if repeat == 1:
                 shot(kind + '-comparison')
             close()
     median = {kind: {key: statistics.median(r[key] for r in records if r['kind'] == kind and not r['warmup']) for key in ['pss_kib', 'mapped_ms']} for kind in ['webview', 'iced']}
-    gate = median['iced']['pss_kib'] < 50 * 1024 and median['iced']['pss_kib'] < median['webview']['pss_kib'] / 2
+    gate = median['iced']['pss_kib'] < 50 * 1024 and median['iced']['pss_kib'] < median['webview']['pss_kib'] / 2 and median['iced']['mapped_ms'] <= median['webview']['mapped_ms'] + 250
     (out / 'result.json').write_text(json.dumps({'checks': checks, 'runs': records, 'median': median, 'footprint_gate': gate}, indent=2) + '\n')
     assert gate, median
 finally:

@@ -42,7 +42,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download 42611779863 -n pin-native-linux -D baseline
-      - name: Compare real Notes windows on a hidden display
+      - name: Verify and compare real native apps on a hidden display
         run: |
           Xvfb :99 -screen 0 1600x1000x24 -nolisten tcp &
           iced_display_pid=$!
