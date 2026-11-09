@@ -127,11 +127,15 @@ def checkboxes(pid):
 def black_strip(path):
     # Capture the window and its bounds atomically in the compositor. Separate
     # geometry queries can include desktop pixels while the edge is moving.
-    image = Image.open(path).convert('RGB')
+    image = Image.open(path).convert('RGBA')
     image = image.crop((3, 3, image.width - 3, image.height - 3))
+    opaque = sum(image.getchannel('A').histogram()[201:])
+    assert opaque > image.width * image.height / 2, 'The painted app must remain visible'
     pixels = image.load()
-    rows = sum(sum(max(pixels[x, y]) < 12 for x in range(image.width)) > image.width * .8 for y in range(image.height))
-    columns = sum(sum(max(pixels[x, y]) < 12 for y in range(image.height)) > image.height * .8 for x in range(image.width))
+    def black(pixel):
+        return pixel[3] > 200 and max(pixel[:3]) < 12
+    rows = sum(sum(black(pixels[x, y]) for x in range(image.width)) > image.width * .8 for y in range(image.height))
+    columns = sum(sum(black(pixels[x, y]) for y in range(image.height)) > image.height * .8 for x in range(image.width))
     return max(rows, columns)
 
 
