@@ -3,6 +3,7 @@
 
 Run with DISPLAY, XAUTHORITY and DBUS_SESSION_BUS_ADDRESS for the hidden desktop.
 Arguments: PIN_BINARY NOTES_BINARY OUTPUT. RESIZE_TEST_SCALE defaults to 1.
+For native Pin, run with ICED_THEME=Light and ICED_THEME=Dark.
 The compositor must not be the user's active desktop.
 """
 import json
@@ -131,6 +132,38 @@ def checkboxes(pid):
     print('PASS: checkbox contrast on five row colors in both themes, click, save and undo', flush=True)
 
 
+def native_checkboxes(wid):
+    g = geometry(wid)
+    theme = os.environ.get('ICED_THEME', 'Light')
+    picture = Image.open(screenshot('native-checkboxes-' + theme)).convert('RGB')
+    evidence = []
+    for i in range(5):
+        left = g['X'] + 42 * scale
+        top = g['Y'] + round((67 + i * 47.5) * scale)
+        crop = picture.crop((left, top, left + 17 * scale, top + 17 * scale))
+        row = picture.getpixel((g['X'] + 62 * scale, top + 8 * scale))
+        colors = Counter(crop.getdata())
+        outline = max((rgb for rgb, count in colors.most_common(8)), key=lambda rgb: contrast(rgb, row))
+        ratio = contrast(outline, row)
+        face = (25, 25, 28) if theme == 'Dark' else (252, 252, 252)
+        evidence.append({'row': i, 'theme': theme, 'contrast': round(ratio, 2), 'face_pixels': colors[face]})
+        assert ratio >= 3, evidence[-1]
+        assert colors[face] >= crop.width * crop.height * .4, evidence[-1]
+    (output / 'checkboxes.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    baseline = (root / 'Pin.md').read_text()
+    move(g['X'] + 50.5 * scale, g['Y'] + 75.5 * scale)
+    input_event('NotifyPointerButton', '(ib)', (272, True))
+    input_event('NotifyPointerButton', '(ib)', (272, False))
+    time.sleep(.6)
+    assert '- [x] ==🟢Green priority==' in (root / 'Pin.md').read_text(), 'Native checkbox saves completion'
+    move(g['X'] + g['WIDTH'] - 167 * scale, g['Y'] + 21 * scale)
+    input_event('NotifyPointerButton', '(ib)', (272, True))
+    input_event('NotifyPointerButton', '(ib)', (272, False))
+    time.sleep(.6)
+    assert (root / 'Pin.md').read_text() == baseline, 'Native undo restores completion and order'
+    print('PASS: native Pin checkbox contrast, completion, save and undo', flush=True)
+
+
 def black_strip(path, before, after):
     # Check the composited desktop: raw window captures can expose transparent
     # pixels that appear black when converted to RGB. The isolated grey desktop
@@ -143,7 +176,8 @@ def black_strip(path, before, after):
     min_width = min(before['WIDTH'], after['WIDTH']) - 6
     min_height = min(before['HEIGHT'], after['HEIGHT']) - 6
     body = image.crop((0, 50 * scale, min_width, min_height))
-    visible = sum(min(pixel) > 210 for pixel in body.getdata())
+    dark = os.environ.get('ICED_THEME') == 'Dark'
+    visible = sum((min(pixel) >= 15 and max(pixel) < 80) if dark else min(pixel) > 210 for pixel in body.getdata())
     assert visible > body.width * body.height / 2, 'The painted app must remain visible'
     rows = sum(sum(max(pixels[x, y]) < 12 for x in range(image.width)) > min_width * .8 for y in range(image.height))
     columns = sum(sum(max(pixels[x, y]) < 12 for y in range(image.height)) > min_height * .8 for x in range(image.width))
@@ -176,7 +210,10 @@ try:
         x('windowactivate', '--sync', wid)
         time.sleep(.5)
         if kind == 'pin':
-            checkboxes(process.pid)
+            if Path(pin).name == 'pin-iced':
+                native_checkboxes(wid)
+            else:
+                checkboxes(process.pid)
         for axis in ['width', 'height']:
             g = geometry(wid)
             sx = g['X'] + g['WIDTH'] - 2
