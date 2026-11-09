@@ -75,6 +75,7 @@ struct App {
     state: RefCell<State>,
     loading: Cell<bool>,
     css: gtk::CssProvider,
+    _appearance: Option<gio::Settings>,
 }
 
 fn home() -> PathBuf {
@@ -157,6 +158,16 @@ pub fn run() -> glib::ExitCode {
 
 impl App {
     fn open(application: &gtk::Application, notes: bool) {
+        let appearance = gio::SettingsSchemaSource::default()
+            .and_then(|source| source.lookup("org.gnome.desktop.interface", true))
+            .filter(|schema| schema.has_key("color-scheme"))
+            .map(|schema| gio::Settings::new_full(&schema, gio::SettingsBackend::NONE, None));
+        if let Some(appearance) = &appearance {
+            apply_appearance(appearance);
+            appearance.connect_changed(Some("color-scheme"), |settings, _| {
+                apply_appearance(settings)
+            });
+        }
         let file = data_file(notes);
         let config = config_root()
             .join(if notes { "StickyNotes" } else { "Pin" })
@@ -204,9 +215,10 @@ impl App {
             .build();
         let title = gtk::Label::new(Some(if notes { "Notes" } else { "Pin" }));
         header.set_title_widget(Some(&title));
-        let pin = gtk::ToggleButton::with_label("Pin");
+        let pin = gtk::ToggleButton::new();
         pin.set_tooltip_text(Some("Keep this window on top"));
         pin.set_active(settings.pinned.unwrap_or(true));
+        pin.set_child(Some(&pin_image(pin.is_active())));
         header.pack_start(&pin);
         let add = gtk::Button::from_icon_name("list-add-symbolic");
         add.set_tooltip_text(Some("New task (Ctrl+N)"));
@@ -312,6 +324,7 @@ impl App {
             }),
             loading: Cell::new(false),
             css,
+            _appearance: appearance,
         });
         for (name, redo) in [("undo", false), ("redo", true)] {
             let action = gio::SimpleAction::new(name, None);
@@ -327,6 +340,7 @@ impl App {
         add.connect_clicked(move |_| a.add_task(None));
         let a = this.clone();
         pin.connect_toggled(move |b| {
+            b.set_child(Some(&pin_image(b.is_active())));
             a.state.borrow_mut().settings.pinned = Some(b.is_active());
             a.set_top(b.is_active());
             a.save_settings();
@@ -380,6 +394,19 @@ impl App {
             a.flush();
         });
         this.render(None);
+        if let Some(settings) = gtk::Settings::default() {
+            let weak = Rc::downgrade(&this);
+            let pin_weak = pin.downgrade();
+            settings.connect_gtk_application_prefer_dark_theme_notify(move |_| {
+                if let Some(app) = weak.upgrade() {
+                    if let Some(pin) = pin_weak.upgrade() {
+                        pin.set_child(Some(&pin_image(pin.is_active())));
+                    }
+                    let focus = app.selection();
+                    app.render(focus);
+                }
+            });
+        }
         this.note.set_sensitive(readable);
         this.list.set_sensitive(readable);
         this.show_notice();
@@ -647,6 +674,12 @@ impl App {
         text.set_size_request(40, 26);
         text.buffer().set_text(&task.text);
         text.buffer().set_enable_undo(false);
+        text.buffer().connect_insert_text(|buffer, iter, value| {
+            if value.contains(['\n', '\r']) {
+                buffer.stop_signal_emission_by_name("insert-text");
+                buffer.insert(iter, &value.replace(['\n', '\r'], " "));
+            }
+        });
         let extra = gio::Menu::new();
         extra.append(Some("Undo"), Some("win.undo"));
         extra.append(Some("Redo"), Some("win.redo"));
@@ -752,11 +785,10 @@ impl App {
         let a = self.clone();
         let r = row.downgrade();
         drop.connect_drop(move |_, value, _, y| {
-            let Ok(moving) = value
+            let Some(moving) = value
                 .get::<String>()
                 .ok()
                 .and_then(|v| v.parse::<u64>().ok())
-                .ok_or(())
             else {
                 return false;
             };
@@ -777,12 +809,12 @@ impl App {
             .tooltip_text("Task options")
             .valign(gtk::Align::Start)
             .build();
-        more.set_popover(Some(&self.options(task, &more)));
+        more.set_popover(Some(&self.options(task)));
         row.append(&more);
         self.list.append(&row);
     }
 
-    fn options(self: &Rc<Self>, task: &Task, anchor: &gtk::MenuButton) -> gtk::Popover {
+    fn options(self: &Rc<Self>, task: &Task) -> gtk::Popover {
         let id = task.id;
         let pop = gtk::Popover::new();
         let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
@@ -793,10 +825,12 @@ impl App {
         let daily = gtk::CheckButton::with_label("Repeat daily");
         daily.set_active(task.daily);
         let a = self.clone();
-        let p = pop.clone();
+        let p = pop.downgrade();
         daily.connect_toggled(move |button| {
             let active = button.is_active();
-            p.popdown();
+            if let Some(p) = p.upgrade() {
+                p.popdown();
+            }
             a.change(None, |s| {
                 if let Some(i) = s.board.index(id) {
                     let t = &mut s.board.tasks[i];
@@ -821,16 +855,21 @@ impl App {
         date_row.append(&save_date);
         let apply = {
             let a = self.clone();
-            let d = date.clone();
-            let p = pop.clone();
+            let d = date.downgrade();
+            let p = pop.downgrade();
             move || {
+                let Some(d) = d.upgrade() else {
+                    return;
+                };
                 let value = d.text().trim().to_owned();
                 if !valid_date(&value) {
                     d.add_css_class("error");
                     d.set_tooltip_text(Some("Use YYYY-MM-DD, optionally HH:MM (24-hour time)."));
                     return;
                 }
-                p.popdown();
+                if let Some(p) = p.upgrade() {
+                    p.popdown();
+                }
                 a.change(None, |s| {
                     if let Some(i) = s.board.index(id) {
                         s.board.tasks[i].date = if value.is_empty() { None } else { Some(value) };
@@ -858,10 +897,12 @@ impl App {
                 .style_context()
                 .add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
             let a = self.clone();
-            let p = pop.clone();
+            let p = pop.downgrade();
             let marker = marker.to_string();
             button.connect_clicked(move |_| {
-                p.popdown();
+                if let Some(p) = p.upgrade() {
+                    p.popdown();
+                }
                 a.change(None, |s| {
                     if let Some(i) = s.board.index(id) {
                         s.board.tasks[i].color = Some(marker.clone());
@@ -885,7 +926,7 @@ impl App {
             }
         }
         let a = self.clone();
-        let p = pop.clone();
+        let p = pop.downgrade();
         custom.connect_color_set(move |b| {
             let c = b.rgba();
             let color = format!(
@@ -894,7 +935,9 @@ impl App {
                 (c.green() * 255.0).round() as u8,
                 (c.blue() * 255.0).round() as u8
             );
-            p.popdown();
+            if let Some(p) = p.upgrade() {
+                p.popdown();
+            }
             a.change(None, |s| {
                 if let Some(i) = s.board.index(id) {
                     s.board.tasks[i].color = Some(color);
@@ -907,9 +950,11 @@ impl App {
         colors.append(&custom);
         content.append(&colors);
         let a = self.clone();
-        let p = pop.clone();
+        let p = pop.downgrade();
         none.connect_clicked(move |_| {
-            p.popdown();
+            if let Some(p) = p.upgrade() {
+                p.popdown();
+            }
             a.change(None, |s| {
                 if let Some(i) = s.board.index(id) {
                     s.board.tasks[i].color = None;
@@ -918,22 +963,25 @@ impl App {
         });
         let sub = gtk::Button::with_label("Add subtask (Ctrl+T)");
         let a = self.clone();
-        let p = pop.clone();
+        let p = pop.downgrade();
         sub.connect_clicked(move |_| {
-            p.popdown();
+            if let Some(p) = p.upgrade() {
+                p.popdown();
+            }
             a.add_task(Some(id));
         });
         content.append(&sub);
         let delete = gtk::Button::with_label("Delete (Ctrl+Shift+Backspace)");
         let a = self.clone();
-        let p = pop.clone();
+        let p = pop.downgrade();
         delete.connect_clicked(move |_| {
-            p.popdown();
+            if let Some(p) = p.upgrade() {
+                p.popdown();
+            }
             a.remove(id);
         });
         content.append(&delete);
         pop.set_child(Some(&content));
-        let _ = anchor;
         pop
     }
 
@@ -963,6 +1011,11 @@ impl App {
 
     fn global_key(self: &Rc<Self>, key: gdk::Key, m: gdk::ModifierType) -> glib::Propagation {
         if !m.contains(gdk::ModifierType::CONTROL_MASK) {
+            return glib::Propagation::Proceed;
+        }
+        if gtk::prelude::GtkWindowExt::focus(&self.window)
+            .is_some_and(|w| w.is::<gtk::Text>() || w.is::<gtk::Entry>())
+        {
             return glib::Propagation::Proceed;
         }
         let shift = m.contains(gdk::ModifierType::SHIFT_MASK);
@@ -1123,7 +1176,7 @@ impl App {
         };
         let text = self.text();
         let mut s = self.state.borrow_mut();
-        if !explicit && s.readable && text != s.clean && disk != s.disk {
+        if !explicit && text != s.clean && disk != s.disk {
             s.conflict = true;
             drop(s);
             self.show_notice();
@@ -1347,4 +1400,25 @@ fn display_date(s: &str) -> String {
             )
         })
         .unwrap_or_else(|_| s.to_owned())
+}
+
+fn apply_appearance(settings: &gio::Settings) {
+    if let Some(gtk) = gtk::Settings::default() {
+        gtk.set_gtk_application_prefer_dark_theme(settings.string("color-scheme") == "prefer-dark");
+    }
+}
+
+fn pin_image(on: bool) -> gtk::Image {
+    let dark = gtk::Settings::default().is_some_and(|s| s.is_gtk_application_prefer_dark_theme());
+    let ink = if dark { "#f0ede5" } else { "#1d1f23" };
+    // Lucide Pin (ISC); the same outline and filled state as the original header.
+    let svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="{}" stroke="{ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>"##,
+        if on { ink } else { "none" }
+    );
+    let stream = gio::MemoryInputStream::from_bytes(&glib::Bytes::from_owned(svg.into_bytes()));
+    match gtk::gdk_pixbuf::Pixbuf::from_stream(&stream, gio::Cancellable::NONE) {
+        Ok(pixbuf) => gtk::Image::from_pixbuf(Some(&pixbuf)),
+        Err(_) => gtk::Image::from_icon_name("view-pin-symbolic"),
+    }
 }

@@ -218,6 +218,11 @@ impl Board {
             if task.daily && task.done && task.completed.as_deref().is_some_and(|d| d < today) {
                 task.done = false;
                 task.completed = None;
+                if let Some(date) = &mut task.date {
+                    if date.get(..10).is_some_and(|day| day < today) {
+                        date.replace_range(..10, today);
+                    }
+                }
                 changed = true;
             } else if task.daily && task.done && task.completed.is_none() {
                 task.completed = Some(today.to_owned());
@@ -309,13 +314,14 @@ mod tests {
 
     #[test]
     fn daily_resets_once_on_next_local_day_and_survives_restart() {
-        let mut b = Board::parse("- [ ] Daily 🔁 daily\n- [x] One-off\n");
+        let mut b = Board::parse("- [ ] Daily 📅 2026-11-09 09:30 🔁 daily\n- [x] One-off\n");
         let id = b.tasks[0].id;
         b.toggle_done(id, "2026-11-09");
         let mut b = Board::parse(&b.markdown());
         assert!(!b.rollover("2026-11-09"));
         assert!(b.rollover("2026-11-10"));
         assert!(!b.tasks[0].done);
+        assert_eq!(b.tasks[0].date.as_deref(), Some("2026-11-10 09:30"));
         assert!(b.tasks[1].done);
         assert!(!b.rollover("2026-11-10"));
     }
