@@ -14,6 +14,7 @@ use std::{
 use x11rb::{
     connection::Connection,
     protocol::xproto::{ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _, EventMask},
+    wrapper::ConnectionExt as _,
 };
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -151,6 +152,8 @@ pub fn run() -> glib::ExitCode {
         || std::env::args()
             .next()
             .is_some_and(|a| a.ends_with("sticky-notes"));
+    glib::set_prgname(Some(if notes { "sticky-notes" } else { "pin" }));
+    glib::set_application_name(if notes { "Sticky Notes" } else { "Pin" });
     let app = gtk::Application::builder()
         .application_id(if notes {
             "io.github.masihmoafi.StickyNotes"
@@ -1431,7 +1434,9 @@ impl App {
             EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
             event,
         );
-        let _ = conn.flush();
+        if let Err(error) = conn.sync() {
+            eprintln!("Window pin state: {error}");
+        }
     }
 
     fn restore_window(&self) -> bool {
@@ -1495,7 +1500,9 @@ impl App {
                 .width(width as u32)
                 .height(height as u32),
         );
-        let _ = conn.flush();
+        if let Err(error) = conn.sync() {
+            eprintln!("Window bounds: {error}");
+        }
         true
     }
 
