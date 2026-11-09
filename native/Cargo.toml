@@ -9,6 +9,7 @@ description = "Native floating priorities and scratch notes"
 default = ["desktop", "custom-protocol"]
 desktop = ["dep:gtk", "dep:tauri", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-clipboard-manager"]
 custom-protocol = ["tauri/custom-protocol"]
+iced-ui = ["dep:iced", "dep:image"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
@@ -22,6 +23,9 @@ tauri = { version = "=2.12.5", optional = true, features = ["image-png"] }
 tauri-plugin-single-instance = { version = "2", optional = true }
 tauri-plugin-clipboard-manager = { version = "2", optional = true }
 
+iced = { version = "=0.14.0", optional = true, default-features = false, features = ["tiny-skia", "x11", "tokio", "svg", "linux-theme-detection", "crisp"] }
+image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+
 [build-dependencies]
 tauri-build = "2"
 
@@ -29,6 +33,11 @@ tauri-build = "2"
 name = "pin-native"
 path = "src/main.rs"
 required-features = ["desktop"]
+
+[[bin]]
+name = "notes-iced"
+path = "src/notes_iced.rs"
+required-features = ["iced-ui"]
 
 [profile.release]
 strip = true

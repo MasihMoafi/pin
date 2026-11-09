@@ -1,0 +1,33 @@
+name: Iced Notes prototype
+on:
+  push:
+    branches: [work/iced-notes]
+    paths: ['native/**', '.github/workflows/iced.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path native/Cargo.toml --check
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+          key: iced-software
+      - run: cargo test --manifest-path native/Cargo.toml --no-default-features --features iced-ui
+      - run: cargo clippy --manifest-path native/Cargo.toml --no-default-features --features iced-ui --all-targets -- -D warnings
+      - run: cargo build --manifest-path native/Cargo.toml --no-default-features --features iced-ui --bin notes-iced --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notes-iced-linux
+          path: native/target/release/notes-iced
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notes-iced-lock
+          path: native/Cargo.lock
