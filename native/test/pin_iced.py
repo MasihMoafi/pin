@@ -326,6 +326,7 @@ try:
     drag_list = '- [ ] ==🟢Alpha==\n- [ ] ==🔵Beta==\n- [ ] ==🟣Gamma==\n'
     p, wid, file, _ = start('drag', drag_list)
     x('mousemove', '--window', wid, 402 * scale, 75 * scale, 'mousedown', '1')
+    time.sleep(.15)
     x('mousemove', '--window', wid, 150 * scale, 210 * scale)
     time.sleep(.3)
     shot('pin-drop-indicator')
@@ -334,11 +335,13 @@ try:
     physical(52)
     saved(drag_list)
     x('mousemove', '--window', wid, 402 * scale, 75 * scale, 'mousedown', '1')
+    time.sleep(.15)
     x('mousemove', 1, 1)
     x('mouseup', '1')
     time.sleep(.4)
     saved(drag_list)
     x('mousemove', '--window', wid, 80 * scale, 75 * scale, 'mousedown', '1')
+    time.sleep(.15)
     x('mousemove', '--window', wid, 150 * scale, 75 * scale, 'mouseup', '1')
     physical(53)  # Cut the dragged text selection, not a task branch.
     wait(lambda: file.read_text() != drag_list, 'Dragging text makes a selection')

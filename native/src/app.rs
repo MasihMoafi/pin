@@ -353,7 +353,13 @@ impl Notes {
     }
     fn load_board(&mut self) {
         if let Some(board) = &self.board {
-            self.board = Some(pin::State::new(&self.content.text(), &board.folded_keys()));
+            let next = pin::State::new(&self.content.text(), &board.folded_keys());
+            let value = next.markdown();
+            self.board = Some(next);
+            if value != self.content.text() {
+                self.content = text_editor::Content::with_text(&value);
+                self.changed();
+            }
         }
     }
     fn history(&mut self, redo: bool) -> Task<Message> {
@@ -373,7 +379,8 @@ impl Notes {
                 (Some(board), Some(snapshot)) => board.restore(snapshot).map(Message::Board),
                 _ => Task::none(),
             };
-            self.content = text_editor::Content::with_text(&next.text);
+            let value = self.board.as_ref().map_or(next.text, pin::State::markdown);
+            self.content = text_editor::Content::with_text(&value);
             self.content.move_to(next.cursor);
             self.scroll = next.scroll;
             self.content
@@ -760,10 +767,10 @@ impl Notes {
                     self.disk = disk;
                     self.content =
                         text_editor::Content::with_text(self.disk.as_deref().unwrap_or_default());
-                    self.load_board();
                     self.dirty = false;
                     self.conflict = false;
                     self.save_at = None;
+                    self.load_board();
                     self.group = None;
                     self.focus = 0;
                     return self.focus_editor();
