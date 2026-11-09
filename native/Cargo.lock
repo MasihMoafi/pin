@@ -3612,6 +3612,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "unicode-segmentation",
+ "x11-dl",
 ]
 
 [[package]]
