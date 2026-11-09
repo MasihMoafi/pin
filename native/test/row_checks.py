@@ -6,7 +6,7 @@ def checkboxes(picture, scale, dark=False):
     pixels = picture.convert('RGB').load()
     candidates = {(x, y) for y in range(50 * scale, picture.height)
                   for x in range(30 * scale, min(100 * scale, picture.width))
-                  if max(abs(a - b) for a, b in zip(pixels[x, y], outline)) < 40}
+                  if max(abs(a - b) for a, b in zip(pixels[x, y], outline)) < 80}
     boxes = []
     while candidates:
         pending = [candidates.pop()]

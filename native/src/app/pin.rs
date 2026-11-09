@@ -972,7 +972,7 @@ impl State {
                         } else {
                             muted(theme)
                         },
-                        width: 1.,
+                        width: 2.,
                         radius: 4.into(),
                     },
                     text_color: None,

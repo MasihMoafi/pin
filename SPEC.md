@@ -17,6 +17,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 ## Window
 - Both apps use native Rust/Iced widgets with tiny-skia software rendering, a consistent shadcn-style interface and Lucide icons; no WebView.
 - Sticky Notes uses Pin's cream icon tile and tilted dark silhouette, and remembers its resizable window.
+- Resize grips are easy to acquire on every edge and corner, follow the pointer continuously, and leave the scrollbar usable, including at the actual desktop's fractional scale.
 - Floats on top; the header pin (Lucide's, as in Elpis) is filled in its own color while pinned, outline when not.
 - Opens on the right of the screen the first time; starts at log-in (`~/.config/autostart/pin.desktop`).
 - App icon: the tilted pin in `logo/` (approved 7 Nov), on a light tile.
@@ -28,6 +29,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 - Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
   Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
 - Each row has a checkbox, text and ⋯ (daily recurrence, color, date, subtask, delete).
+- Checkboxes have a clear gap before the text; chevrons, checkboxes and trailing controls share the center of the first text line, including wrapped tasks. Separate rows have visible space between them.
 - Unchecked shadcn checkboxes keep a solid background and an outline with at least 3:1 contrast against task colors in light and dark themes.
 - A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
   away (also Ctrl+.); the folded tasks are remembered on this computer, never written to the file.
