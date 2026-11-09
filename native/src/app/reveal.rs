@@ -18,7 +18,7 @@ impl Reveal {
         Self {
             scroll,
             scroll_id: Id::new(scroll),
-            target_id: Id::new(target),
+            target_id: target.into(),
             target: None,
             viewport: None,
         }

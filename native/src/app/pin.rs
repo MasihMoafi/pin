@@ -271,7 +271,7 @@ impl State {
         };
         Task::batch([
             self.focus(),
-            Task::widget(super::reveal::Reveal::new(scroll, target)),
+            iced::advanced::widget::operate(super::reveal::Reveal::new(scroll, target)),
         ])
     }
     pub fn selection(&self) -> Option<String> {
@@ -983,7 +983,7 @@ impl State {
             right: 4.,
         })
         .align_y(iced::Top);
-        let indicator = self.drop == Some((id, false)) || self.drop == Some((id, true));
+        let indicator = self.drop == Some((id, false));
         let accent = container(space())
             .width(Fill)
             .height(2)
@@ -995,7 +995,18 @@ impl State {
                 })
             });
         let color = t.color.clone();
-        let body = container(column![accent, row])
+        let after = self.drop == Some((id, true));
+        let bottom = container(space())
+            .width(Fill)
+            .height(2)
+            .style(move |theme| {
+                container::Style::default().background(if after {
+                    fg(theme)
+                } else {
+                    Color::TRANSPARENT
+                })
+            });
+        let body = container(column![accent, row, bottom])
             .width(Fill)
             .style(move |theme| container::Style {
                 background: Some(tint(theme, color.as_deref()).into()),
