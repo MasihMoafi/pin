@@ -128,6 +128,7 @@ fn persist(shared: &Shared) {
 
 #[tauri::command]
 fn get_state(shared: tauri::State<'_, Shared>) -> Result<Boot, String> {
+    eprintln!("Pin: reading document");
     let disk = storage::read(&shared.file).map_err(|e| e.to_string())?;
     let text = disk.clone().unwrap_or_default();
     let board = (!shared.notes).then(|| Board::parse(&text));
@@ -229,6 +230,7 @@ fn save_view(folded: Vec<String>, shared: tauri::State<'_, Shared>) {
 }
 #[tauri::command]
 fn show_ready(window: WebviewWindow) -> Result<(), String> {
+    eprintln!("Pin: showing window");
     window
         .show()
         .and_then(|_| window.set_focus())
@@ -312,6 +314,7 @@ pub fn run() {
             write_clipboard
         ])
         .setup(move |app| {
+            eprintln!("Pin: setting up window");
             watch_theme(app.handle());
             let width = if settings.width >= 280. {
                 settings.width
@@ -335,12 +338,14 @@ pub fn run() {
                     .always_on_top(settings.pinned.unwrap_or(true))
                     .visible(false)
                     .build()?;
+            eprintln!("Pin: window created");
             let icon = tauri::image::Image::from_bytes(if notes {
                 include_bytes!("../../logo/notes-256.png")
             } else {
                 include_bytes!("../../logo/pin-256.png")
             })?;
             window.set_icon(icon)?;
+            eprintln!("Pin: icon set");
             if let Some(monitor) = window.primary_monitor()? {
                 let scale = monitor.scale_factor();
                 let origin = monitor.position();
@@ -358,6 +363,7 @@ pub fn run() {
                 );
                 window.set_position(tauri::PhysicalPosition::new(x, y))?;
             }
+            eprintln!("Pin: setup finished");
             Ok(())
         })
         .on_window_event(|window, event| {
