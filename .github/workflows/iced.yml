@@ -37,7 +37,9 @@ jobs:
         with:
           name: notes-iced-lock
           path: native/Cargo.lock
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb openbox xdotool x11-utils xclip python3-pil ripgrep libxkbcommon-x11-0 fonts-inter fonts-noto-core libwebkit2gtk-4.1-0 libgtk-3-0
+      - name: Install desktop test dependencies
+        timeout-minutes: 10
+        run: sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq && sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y -qq xvfb openbox picom xdotool x11-utils x11-xserver-utils xclip python3-pil ripgrep libxkbcommon-x11-0 fonts-inter fonts-noto-core libwebkit2gtk-4.1-0 libgtk-3-0
       - name: Download the verified WebView baseline
         env:
           GH_TOKEN: ${{ github.token }}
@@ -47,7 +49,8 @@ jobs:
           Xvfb :99 -screen 0 1600x1000x24 -nolisten tcp &
           iced_display_pid=$!
           iced_wm_pid=''
-          trap 'kill "$iced_wm_pid" "$iced_display_pid" 2>/dev/null || true' EXIT
+          iced_compositor_pid=''
+          trap 'kill "$iced_compositor_pid" "$iced_wm_pid" "$iced_display_pid" 2>/dev/null || true' EXIT
           export DISPLAY=:99
           for attempt in $(seq 1 100); do
             xdpyinfo >/dev/null 2>&1 && break
@@ -60,6 +63,11 @@ jobs:
             xprop -root _NET_SUPPORTING_WM_CHECK | rg -q 'window id #' && break
             sleep 0.1
           done
+          xsetroot -solid '#7f7f7f'
+          picom --backend xrender --no-vsync &
+          iced_compositor_pid=$!
+          sleep 1
+          kill -0 "$iced_compositor_pid"
           dbus-run-session -- /usr/bin/python3 -I native/test/pin_iced.py baseline/pin-native native/target/release/pin-iced iced-results/pin-scale1
           ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/pin_iced.py baseline/pin-native native/target/release/pin-iced iced-results/pin-scale2
           dbus-run-session -- /usr/bin/python3 -I native/test/iced.py baseline/pin-native native/target/release/notes-iced iced-results/scale1
