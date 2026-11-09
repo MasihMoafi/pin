@@ -295,10 +295,13 @@ pub fn valid_date(s: &str) -> bool {
     }
     match s.split_once(' ') {
         Some((d, t)) => {
-            NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok()
-                && chrono::NaiveTime::parse_from_str(t, "%H:%M").is_ok()
+            NaiveDate::parse_from_str(d, "%Y-%m-%d")
+                .is_ok_and(|date| date.format("%Y-%m-%d").to_string() == d)
+                && chrono::NaiveTime::parse_from_str(t, "%H:%M")
+                    .is_ok_and(|time| time.format("%H:%M").to_string() == t)
         }
-        None => NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok(),
+        None => NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .is_ok_and(|date| date.format("%Y-%m-%d").to_string() == s),
     }
 }
 
@@ -370,5 +373,7 @@ mod tests {
         assert!(valid_date("2028-02-29 23:59"));
         assert!(!valid_date("2026-02-29"));
         assert!(!valid_date("2026-11-09 24:00"));
+        assert!(!valid_date("2026-11-9"));
+        assert!(!valid_date("2026-11-09 9:00"));
     }
 }
