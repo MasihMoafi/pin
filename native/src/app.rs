@@ -65,6 +65,7 @@ enum Message {
     MenuMove(i8),
     DeleteWord(bool),
     Theme(iced::theme::Mode),
+    FramePresented,
 }
 
 struct Snapshot {
@@ -272,6 +273,10 @@ impl Notes {
                     | window::Event::Resized(_)
                     | window::Event::CloseRequested),
                 ) => Some(Message::Window(id, e)),
+                #[cfg(target_os = "linux")]
+                Event::Window(window::Event::RedrawRequested(_)) if crate::x11::pending() => {
+                    Some(Message::FramePresented)
+                }
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                     Some(Message::Board(pin::Message::Drop))
                 }
@@ -676,6 +681,15 @@ impl Notes {
                                 }
                             }
                         }
+                    })
+                    .discard();
+                }
+            }
+            Message::FramePresented => {
+                if let Some(id) = self.window {
+                    return window::run(id, |_| {
+                        #[cfg(target_os = "linux")]
+                        crate::x11::frame_presented();
                     })
                     .discard();
                 }

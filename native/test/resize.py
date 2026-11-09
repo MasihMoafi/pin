@@ -112,8 +112,11 @@ def checkboxes(pid):
     input_event('NotifyPointerButton', '(ib)', (272, False))
     time.sleep(.6)
     assert '- [x] ==🟢Green priority==' in (root / 'Pin.md').read_text(), 'Checkbox click must save completion'
-    for code, pressed in [(29, True), (44, True), (44, False), (29, False)]:
-        input_event('NotifyKeyboardKeycode', '(ub)', (code, pressed))
+    undo = next(n for n in walk(app) if n.get_name() == 'Undo (Ctrl+Z)')
+    r = undo.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+    move((r.x + r.width / 2) * scale, (r.y + r.height / 2) * scale)
+    input_event('NotifyPointerButton', '(ib)', (272, True))
+    input_event('NotifyPointerButton', '(ib)', (272, False))
     time.sleep(.6)
     assert (root / 'Pin.md').read_text() == baseline, 'Undo restores checkbox state and position'
     print('PASS: checkbox contrast on five row colors in both themes, click, save and undo', flush=True)
