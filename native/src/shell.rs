@@ -208,12 +208,30 @@ fn watch_theme(app: &tauri::AppHandle) {
             gtk.set_gtk_application_prefer_dark_theme(dark);
         }
         app.state::<Shared>().dark.store(dark, Ordering::Relaxed);
+        if let Some(window) = app.get_webview_window("main") {
+            resize_background(&window, dark);
+        }
         let _ = app.emit("desktop-theme", dark);
     };
     update(&settings, app);
     let handle = app.clone();
     settings.connect_changed(Some("color-scheme"), move |s, _| update(s, &handle));
     APPEARANCE.with(|slot| *slot.borrow_mut() = Some(settings));
+}
+
+#[allow(deprecated)] // GDK's X11 resize background has no GTK 3 replacement.
+fn resize_background(window: &WebviewWindow, dark: bool) {
+    if let Ok(window) = window.gtk_window() {
+        if let Some(surface) = window.window() {
+            let rgb = if dark { [25., 25., 28.] } else { [252.; 3] };
+            surface.set_background_rgba(&gtk::gdk::RGBA::new(
+                rgb[0] / 255.,
+                rgb[1] / 255.,
+                rgb[2] / 255.,
+                1.,
+            ));
+        }
+    }
 }
 
 pub fn run() {
@@ -286,6 +304,7 @@ pub fn run() {
                     .always_on_top(settings.pinned.unwrap_or(true))
                     .visible(true)
                     .build()?;
+            resize_background(&window, app.state::<Shared>().dark.load(Ordering::Relaxed));
             let icon = tauri::image::Image::from_bytes(if notes {
                 include_bytes!("../../logo/notes-256.png")
             } else {

@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Capture continuous edge drags on an isolated GNOME Wayland/Xwayland desktop.
+
+Run with DISPLAY, XAUTHORITY and DBUS_SESSION_BUS_ADDRESS for the hidden desktop.
+Arguments: PIN_BINARY NOTES_BINARY OUTPUT. RESIZE_TEST_SCALE defaults to 1.
+The compositor must not be the user's active desktop.
+"""
+import json
+import math
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+from gi.repository import Gio, GLib
+from PIL import Image
+
+pin, notes = (str(Path(p).resolve()) for p in sys.argv[1:3])
+output = Path(sys.argv[3]).resolve()
+output.mkdir(parents=True, exist_ok=True)
+root = Path(tempfile.mkdtemp(prefix='resize-', dir=output))
+scale = int(os.environ.get('RESIZE_TEST_SCALE', '1'))
+assert os.environ['DISPLAY'] != ':0', 'Use an isolated desktop'
+env = dict(os.environ, GDK_BACKEND='x11', WEBKIT_DISABLE_COMPOSITING_MODE='1', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), XDG_CONFIG_HOME=str(root / 'config'), STICKY_NOTES_FILE=str(root / 'Notes.txt'), PRIORITIES_FILE=str(root / 'Pin.md'))
+(root / 'Notes.txt').write_text('Responsibilities\n\nEach agent is responsible for something.\n')
+(root / 'Pin.md').write_text('- [ ] ==🟢A priority with a visible checkbox==\n- [ ] Another priority\n')
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+# The isolated shell grants screenshots to the media-keys service.
+name = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'RequestName', GLib.Variant('(su)', ('org.gnome.SettingsDaemon.MediaKeys', 0)), None, 0, 3000, None).unpack()[0]
+assert name == 1, 'The hidden desktop must not have an active media-keys service'
+session = bus.call_sync('org.gnome.Mutter.RemoteDesktop', '/org/gnome/Mutter/RemoteDesktop', 'org.gnome.Mutter.RemoteDesktop', 'CreateSession', None, None, 0, 3000, None).unpack()[0]
+
+
+def input_event(method, signature=None, args=None):
+    return bus.call_sync('org.gnome.Mutter.RemoteDesktop', session, 'org.gnome.Mutter.RemoteDesktop.Session', method, GLib.Variant(signature, args) if signature else None, None, 0, 3000, None)
+
+
+def x(*args):
+    return subprocess.check_output(['xdotool', *map(str, args)], env=env, text=True, stderr=subprocess.DEVNULL).strip()
+
+
+def geometry(wid):
+    return {k: int(v) for k, v in (line.split('=') for line in x('getwindowgeometry', '--shell', wid).splitlines())}
+
+
+position = [0., 0.]
+
+
+def move(px, py):
+    input_event('NotifyPointerMotionRelative', '(dd)', (px - position[0], py - position[1]))
+    position[:] = [px, py]
+
+
+def screenshot(name):
+    path = output / (name + '.png')
+    success, _ = bus.call_sync('org.gnome.Shell.Screenshot', '/org/gnome/Shell/Screenshot', 'org.gnome.Shell.Screenshot', 'Screenshot', GLib.Variant('(bbs)', (False, False, str(path))), None, 0, 5000, None).unpack()
+    assert success, 'Compositor screenshot failed'
+    return path
+
+
+def black_strip(path, before, after):
+    # The window can change size during capture. Include both bounds so a new
+    # unpainted edge cannot be hidden by taking only their intersection.
+    g = before
+    width = max(before['WIDTH'], after['WIDTH'])
+    height = max(before['HEIGHT'], after['HEIGHT'])
+    image = Image.open(path).convert('RGB').crop((g['X'] + 3, g['Y'] + 3, g['X'] + width - 3, g['Y'] + height - 3))
+    pixels = image.load()
+    rows = sum(sum(max(pixels[x, y]) < 12 for x in range(image.width)) > image.width * .8 for y in range(image.height))
+    columns = sum(sum(max(pixels[x, y]) < 12 for y in range(image.height)) > image.height * .8 for x in range(image.width))
+    return max(rows, columns)
+
+
+records = []
+children = []
+input_event('Start')
+input_event('NotifyPointerMotionRelative', '(dd)', (-10000., -10000.))
+time.sleep(.1)
+try:
+    for kind, binary in [('pin', pin), ('notes', notes)]:
+        with (output / (kind + '.log')).open('w') as log:
+            process = subprocess.Popen([binary], env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        children.append(process)
+        wid = None
+        for _ in range(250):
+            if process.poll() is not None:
+                raise AssertionError(kind + ' exited during startup')
+            try:
+                wid = x('search', '--onlyvisible', '--pid', process.pid).splitlines()[0]
+                break
+            except (subprocess.CalledProcessError, IndexError):
+                time.sleep(.1)
+        assert wid, kind + ' did not open'
+        time.sleep(1)
+        x('windowmove', wid, 80, 60)
+        x('windowsize', wid, 430 * scale, 360 * scale)
+        x('windowactivate', '--sync', wid)
+        time.sleep(.5)
+        for axis in ['width', 'height']:
+            g = geometry(wid)
+            sx = g['X'] + g['WIDTH'] - 2
+            sy = g['Y'] + (g['HEIGHT'] // 2 if axis == 'width' else g['HEIGHT'] - 2)
+            move(sx, sy)
+            time.sleep(.1)
+            input_event('NotifyPointerButton', '(ib)', (272, True))
+            time.sleep(.05)
+            stop = threading.Event()
+            failures = []
+
+            def motion():
+                began = time.monotonic()
+                try:
+                    while not stop.is_set():
+                        delta = 100 * scale * math.sin((time.monotonic() - began) * 6)
+                        move(sx + delta if axis == 'width' else sx, sy if axis == 'width' else sy + delta)
+                        time.sleep(.016)
+                except BaseException as error:
+                    failures.append(error)
+
+            thread = threading.Thread(target=motion)
+            thread.start()
+            try:
+                for frame in range(8):
+                    before = geometry(wid)
+                    path = screenshot(f'{kind}-{axis}-{frame:02}')
+                    after = geometry(wid)
+                    strip = black_strip(path, before, after)
+                    records.append({'app': kind, 'axis': axis, 'frame': frame, 'black_strip_pixels': strip, 'before': before, 'after': after})
+            finally:
+                stop.set()
+                thread.join(timeout=4)
+                input_event('NotifyPointerButton', '(ib)', (272, False))
+            assert not failures, failures
+            print('CAPTURED', kind, axis, flush=True)
+            time.sleep(.3)
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=5)
+    (output / 'result.json').write_text(json.dumps({'scale': scale, 'frames': records}, indent=2) + '\n')
+    bad = [r for r in records if r['black_strip_pixels'] > 2 * scale]
+    assert not bad, f'{len(bad)} frames expose black strips: {bad[:3]}'
+    print('PASS: continuous horizontal and vertical drags retain both app pictures', flush=True)
+finally:
+    input_event('NotifyPointerButton', '(ib)', (272, False))
+    input_event('Stop')
+    for child in reversed(children):
+        if child.poll() is None:
+            os.killpg(child.pid, signal.SIGTERM)
+            try:
+                child.wait(timeout=4)
+            except subprocess.TimeoutExpired:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait()
