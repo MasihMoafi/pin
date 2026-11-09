@@ -3,3 +3,6 @@ pub mod paths;
 pub mod storage;
 #[cfg(all(target_os = "linux", feature = "iced-ui"))]
 pub mod x11;
+
+#[cfg(feature = "iced-ui")]
+pub mod app;

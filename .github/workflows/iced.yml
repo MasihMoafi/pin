@@ -1,7 +1,7 @@
-name: Iced Notes prototype
+name: Native Iced apps
 on:
   push:
-    branches: [work/iced-notes]
+    branches: [work/iced-notes, work/iced-pin]
     paths: ['native/**', '.github/workflows/iced.yml']
   workflow_dispatch:
 permissions:
@@ -23,11 +23,15 @@ jobs:
           cache-on-failure: true
       - run: cargo test --locked --manifest-path native/Cargo.toml --no-default-features --features iced-ui
       - run: cargo clippy --locked --manifest-path native/Cargo.toml --no-default-features --features iced-ui --all-targets -- -D warnings
-      - run: cargo build --locked --manifest-path native/Cargo.toml --no-default-features --features iced-ui --bin notes-iced --release
+      - run: cargo build --locked --manifest-path native/Cargo.toml --no-default-features --features iced-ui --bins --release
       - uses: actions/upload-artifact@v4
         with:
           name: notes-iced-linux
           path: native/target/release/notes-iced
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pin-iced-linux
+          path: native/target/release/pin-iced
       - uses: actions/upload-artifact@v4
         if: always()
         with:
