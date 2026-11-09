@@ -41,6 +41,11 @@ name = "notes-iced"
 path = "src/notes_iced.rs"
 required-features = ["iced-ui"]
 
+[[bin]]
+name = "pin-iced"
+path = "src/pin_iced.rs"
+required-features = ["iced-ui"]
+
 [profile.release]
 strip = true
 lto = "thin"
