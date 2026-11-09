@@ -1474,14 +1474,9 @@ impl App {
         self.set_top(self.state.borrow().settings.pinned.unwrap_or(true));
         let s = self.state.borrow();
         let root = &conn.setup().roots[screen];
-        let width = self
-            .window
-            .default_width()
-            .min(i32::from(root.width_in_pixels));
-        let height = self
-            .window
-            .default_height()
-            .min(i32::from(root.height_in_pixels));
+        let scale = self.window.scale_factor();
+        let width = (self.window.default_width() * scale).min(i32::from(root.width_in_pixels));
+        let height = (self.window.default_height() * scale).min(i32::from(root.height_in_pixels));
         let x = s
             .settings
             .x
@@ -1517,8 +1512,10 @@ impl App {
                 if !self.window.is_maximized() {
                     if let Ok(cookie) = conn.get_geometry(xid) {
                         if let Ok(geometry) = cookie.reply() {
-                            s.settings.width = i32::from(geometry.width);
-                            s.settings.height = i32::from(geometry.height);
+                            s.settings.width =
+                                i32::from(geometry.width) / self.window.scale_factor();
+                            s.settings.height =
+                                i32::from(geometry.height) / self.window.scale_factor();
                         }
                     }
                 }

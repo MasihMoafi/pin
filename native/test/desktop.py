@@ -16,6 +16,7 @@ from gi.repository import Atspi
 from PIL import ImageGrab
 
 binary = str(Path(sys.argv[1]).resolve())
+SCALE = int(os.environ.get("GDK_SCALE", "1"))
 output = Path(sys.argv[2]).resolve()
 output.mkdir(parents=True, exist_ok=True)
 scratch = Path(tempfile.mkdtemp(prefix="case-", dir=output))
@@ -97,7 +98,7 @@ def start(notes):
 
 def click(wid, px, py):
     time.sleep(0.15)  # Let GTK allocate widgets after a structural change.
-    x("mousemove", "--window", wid, px, py, "click", 1)
+    x("mousemove", "--window", wid, px * SCALE, py * SCALE, "click", 1)
     time.sleep(0.1)
 
 
@@ -114,7 +115,7 @@ def geometry(wid):
 
 
 def close(proc):
-    click(wid, int(geometry(wid)["WIDTH"]) - 25, 26)
+    click(wid, int(geometry(wid)["WIDTH"]) // SCALE - 25, 26)
     proc.wait(timeout=8)
     assert proc.returncode == 0
 
@@ -197,7 +198,7 @@ try:
     key("ctrl+z")
     saved(list_file, baseline)
     check("Task paste preserves a single Markdown line")
-    x("windowsize", wid, 350, 420)
+    x("windowsize", wid, 350 * SCALE, 420 * SCALE)
     x("windowmove", wid, 40, 60)
     time.sleep(0.4)
     shot("pin-narrow")
@@ -248,16 +249,21 @@ try:
     type_text("Loaded")
     saved(note_file, "Disk version\nLoaded")
     check("External edits preserve local text and both conflict choices work")
-    x("windowsize", wid, 420, 300)
+    x("windowsize", wid, 420 * SCALE, 300 * SCALE)
     time.sleep(0.5)
     shot("notes-light")
+    bounds = geometry(wid)
+    point = (int(bounds["X"]) + 40, int(bounds["Y"]) + int(bounds["HEIGHT"]) - 35)
+    light_pixel = ImageGrab.grab(xdisplay=env["DISPLAY"]).getpixel(point)
     subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-dark"], env=env, check=True)
     time.sleep(0.6)
     shot("notes-dark")
-    light = ImageGrab.grab(xdisplay=env["DISPLAY"])
+    dark_pixel = ImageGrab.grab(xdisplay=env["DISPLAY"]).getpixel(point)
+    assert sum(light_pixel[:3]) - sum(dark_pixel[:3]) > 180, (light_pixel, dark_pixel)
     subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "default"], env=env, check=True)
     time.sleep(0.6)
-    assert ImageGrab.grab(xdisplay=env["DISPLAY"]).tobytes() != light.tobytes(), "Live theme did not change"
+    restored = ImageGrab.grab(xdisplay=env["DISPLAY"]).getpixel(point)
+    assert sum(restored[:3]) - sum(dark_pixel[:3]) > 180, "Live theme did not change back"
     check("Live desktop theme changes reach the actual window")
     before = geometry(wid)
     close(proc)
@@ -274,7 +280,7 @@ try:
             k, v = line.split(":", 1)
             usage[k] = v.strip()
     close(proc)
-    result = {"checks": checks, "memory": usage, "binary_bytes": Path(binary).stat().st_size}
+    result = {"checks": checks, "scale": SCALE, "memory": usage, "binary_bytes": Path(binary).stat().st_size}
     (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)
 except BaseException:

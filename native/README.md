@@ -50,4 +50,10 @@ cargo build --release
 
 `test/desktop.py` drives the actual app with isolated files on a hidden X11
 display. It checks text undo/redo, daily tasks, task changes, file conflicts
-and resizing. It requires GTK 4 introspection, AT-SPI, Xvfb and xdotool.
+and resizing. It requires GTK 4 introspection, AT-SPI, Xvfb, an X11 window
+manager, xdotool, xprop, xclip and Pillow. With the hidden display and its
+window manager running, run it in an isolated D-Bus session:
+
+```sh
+DISPLAY=:94 dbus-run-session -- /usr/bin/python3 -I native/test/desktop.py /path/to/pin-native /path/to/screenshots
+```
