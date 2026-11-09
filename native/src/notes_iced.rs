@@ -918,94 +918,6 @@ fn icon_path(name: &str) -> &'static str {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn note(value: &str) -> Notes {
-        Notes::new(
-            PathBuf::from("unused.txt"),
-            PathBuf::from("unused.json"),
-            Bounds::default(),
-            Some(value.into()),
-        )
-    }
-
-    #[test]
-    fn preserves_plain_text_unicode_and_trailing_newlines() {
-        for value in [
-            "",
-            "A thought",
-            "A thought\n",
-            "سلام\n\nAnother thought.\n\n",
-        ] {
-            assert_eq!(note(value).content.text(), value);
-        }
-    }
-
-    #[test]
-    fn typed_phrase_and_selected_delete_share_toolbar_history() {
-        let mut n = note("سلام\nA first note.\n");
-        let before = n.content.text();
-        let cursor = n.content.cursor();
-        for ch in "A new thought".chars() {
-            n.edit(text_editor::Action::Edit(text_editor::Edit::Insert(ch)));
-        }
-        let typed = n.content.text();
-        n.history(false);
-        assert_eq!(n.content.text(), before);
-        assert_eq!(n.content.cursor(), cursor);
-        n.history(true);
-        assert_eq!(n.content.text(), typed);
-        n.edit(text_editor::Action::SelectAll);
-        n.edit(text_editor::Action::Edit(text_editor::Edit::Backspace));
-        assert!(n.content.text().is_empty());
-        n.history(false);
-        assert_eq!(n.content.text(), typed);
-    }
-
-    #[test]
-    fn word_delete_restores_original_caret_and_text_on_undo() {
-        let mut n = note("سلام world");
-        let cursor = n.content.cursor();
-        let _ = n.update(Message::DeleteWord(false));
-        assert_eq!(n.content.text(), "سلام ");
-        n.history(false);
-        assert_eq!(n.content.text(), "سلام world");
-        assert_eq!(n.content.cursor(), cursor);
-    }
-
-    #[test]
-    fn tab_reaches_actions_and_skips_disabled_history_buttons() {
-        let mut n = note("Hello");
-        for expected in [3, 4, 5, 6, 0] {
-            let _ = n.update(Message::FocusTab(false));
-            assert_eq!(n.focus, expected);
-        }
-        let _ = n.update(Message::FocusTab(true));
-        assert_eq!(n.focus, 6);
-    }
-
-    #[test]
-    fn shortcut_actions_use_physical_keys() {
-        assert!(matches!(
-            shortcut(Physical::Code(Code::KeyZ), keyboard::Modifiers::CTRL),
-            Some(Message::Undo)
-        ));
-        assert!(matches!(
-            shortcut(
-                Physical::Code(Code::KeyZ),
-                keyboard::Modifiers::CTRL | keyboard::Modifiers::SHIFT
-            ),
-            Some(Message::Redo)
-        ));
-        assert!(matches!(
-            shortcut(Physical::Code(Code::KeyS), keyboard::Modifiers::CTRL),
-            Some(Message::Save)
-        ));
-    }
-}
-
 fn is_dark(theme: &Theme) -> bool {
     theme.palette().background.r < 0.5
 }
@@ -1105,4 +1017,92 @@ fn resize_handle(direction: window::Direction) -> Element<'static, Message> {
             iced::Top
         })
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(value: &str) -> Notes {
+        Notes::new(
+            PathBuf::from("unused.txt"),
+            PathBuf::from("unused.json"),
+            Bounds::default(),
+            Some(value.into()),
+        )
+    }
+
+    #[test]
+    fn preserves_plain_text_unicode_and_trailing_newlines() {
+        for value in [
+            "",
+            "A thought",
+            "A thought\n",
+            "سلام\n\nAnother thought.\n\n",
+        ] {
+            assert_eq!(note(value).content.text(), value);
+        }
+    }
+
+    #[test]
+    fn typed_phrase_and_selected_delete_share_toolbar_history() {
+        let mut n = note("سلام\nA first note.\n");
+        let before = n.content.text();
+        let cursor = n.content.cursor();
+        for ch in "A new thought".chars() {
+            n.edit(text_editor::Action::Edit(text_editor::Edit::Insert(ch)));
+        }
+        let typed = n.content.text();
+        n.history(false);
+        assert_eq!(n.content.text(), before);
+        assert_eq!(n.content.cursor(), cursor);
+        n.history(true);
+        assert_eq!(n.content.text(), typed);
+        n.edit(text_editor::Action::SelectAll);
+        n.edit(text_editor::Action::Edit(text_editor::Edit::Backspace));
+        assert!(n.content.text().is_empty());
+        n.history(false);
+        assert_eq!(n.content.text(), typed);
+    }
+
+    #[test]
+    fn word_delete_restores_original_caret_and_text_on_undo() {
+        let mut n = note("سلام world");
+        let cursor = n.content.cursor();
+        let _ = n.update(Message::DeleteWord(false));
+        assert_eq!(n.content.text(), "سلام ");
+        n.history(false);
+        assert_eq!(n.content.text(), "سلام world");
+        assert_eq!(n.content.cursor(), cursor);
+    }
+
+    #[test]
+    fn tab_reaches_actions_and_skips_disabled_history_buttons() {
+        let mut n = note("Hello");
+        for expected in [3, 4, 5, 6, 0] {
+            let _ = n.update(Message::FocusTab(false));
+            assert_eq!(n.focus, expected);
+        }
+        let _ = n.update(Message::FocusTab(true));
+        assert_eq!(n.focus, 6);
+    }
+
+    #[test]
+    fn shortcut_actions_use_physical_keys() {
+        assert!(matches!(
+            shortcut(Physical::Code(Code::KeyZ), keyboard::Modifiers::CTRL),
+            Some(Message::Undo)
+        ));
+        assert!(matches!(
+            shortcut(
+                Physical::Code(Code::KeyZ),
+                keyboard::Modifiers::CTRL | keyboard::Modifiers::SHIFT
+            ),
+            Some(Message::Redo)
+        ));
+        assert!(matches!(
+            shortcut(Physical::Code(Code::KeyS), keyboard::Modifiers::CTRL),
+            Some(Message::Save)
+        ));
+    }
 }
