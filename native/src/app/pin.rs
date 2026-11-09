@@ -288,6 +288,14 @@ impl State {
     }
     fn edit(&mut self, target: Target, action: text_editor::Action) {
         self.active = target;
+        if let Some(o) = &mut self.options {
+            match target {
+                Target::Date => o.focus = 1,
+                Target::Time => o.focus = 2,
+                Target::Color => o.focus = 18,
+                _ => (),
+            }
+        }
         let Some(c) = self.editor_mut(target) else {
             return;
         };
@@ -807,7 +815,7 @@ impl State {
                 Some(super::Message::Board(Message::Fold(id))),
                 false,
             )
-            .map(|m| match m {
+            .map(move |m| match m {
                 super::Message::Board(m) => m,
                 _ => Message::Fold(id),
             })

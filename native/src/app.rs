@@ -457,6 +457,15 @@ impl Notes {
                     }
                     _ => (),
                 }
+                if matches!(
+                    action,
+                    pin::Message::Copy(_)
+                        | pin::Message::Paste
+                        | pin::Message::Pasted(_)
+                        | pin::Message::SelectAll
+                ) {
+                    self.context = None;
+                }
                 let before = self.snapshot();
                 let kind = pin::State::group(&action);
                 let board = self.board.as_mut().unwrap();
@@ -607,11 +616,24 @@ impl Notes {
                 }
             }
             Message::Placement(id, point, legacy, scale, monitor) => {
+                let old = Size::new(self.bounds.width, self.bounds.height);
+                if let Some(size) = monitor {
+                    self.bounds.width = self.bounds.width.min(size.width);
+                    self.bounds.height = self.bounds.height.min(size.height);
+                }
                 let position = restored_position(point, legacy, scale, monitor, &self.bounds);
                 self.bounds.x = Some(position.x);
                 self.bounds.y = Some(position.y);
                 self.preferences();
-                return window::move_to(id, position);
+                let size = Size::new(self.bounds.width, self.bounds.height);
+                return Task::batch([
+                    window::move_to(id, position),
+                    if old != size {
+                        window::resize(id, size)
+                    } else {
+                        Task::none()
+                    },
+                ]);
             }
             Message::Drag => {
                 if let Some(id) = self.window {
@@ -843,7 +865,8 @@ impl Notes {
                 container(space())
                     .width(1)
                     .height(16)
-                    .style(|theme| container::Style::default().background(line(theme))),
+                    .style(|theme| container::Style::default().background(line(theme)))
+                    .into(),
                 icon_button(
                     if self.bounds.pinned.unwrap_or(true) {
                         "Unpin from top"
