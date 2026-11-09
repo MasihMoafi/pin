@@ -81,7 +81,7 @@ def find(name):
 
 def click(node):
     rect = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
-    x('mousemove', rect.x + rect.width // 2, rect.y + rect.height // 2, 'click', '1')
+    x('mousemove', (rect.x + rect.width // 2) * scale, (rect.y + rect.height // 2) * scale, 'click', '1')
     time.sleep(.15)
 
 
@@ -155,7 +155,7 @@ try:
         baseline = path.read_text()
         field = find(label)
         click(field)
-        x('key', 'ctrl+End' if note_mode else 'End')
+        x('key', 'ctrl+End')
         x('type', '--clearmodifiers', '--delay', '20', ' extra words')
         expected = baseline + ' extra words' if note_mode else baseline.replace(long_task, long_task + ' extra words')
         saved(path, expected)
