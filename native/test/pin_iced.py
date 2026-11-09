@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import signal
+import runpy
+from collections import Counter
 import statistics
 import subprocess
 import sys
@@ -20,6 +22,7 @@ root = Path(tempfile.mkdtemp(prefix='pin-', dir=out))
 scale = int(os.environ.get('ICED_TEST_SCALE', '1'))
 env = dict(os.environ, GDK_BACKEND='x11', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), WEBKIT_DISABLE_COMPOSITING_MODE='1', LIBGL_ALWAYS_SOFTWARE='1', GSETTINGS_BACKEND='keyfile')
 children, checks = [], []
+resize_edges=runpy.run_path(str(Path(__file__).with_name("window_checks.py")))["resize"]
 today = date.today().isoformat()
 initial = 'Intro stays here.\n\n- [ ] ==🟢First priority==\n  - [ ] ==🔵Child task==\n- [ ] ==🟣Second priority==\n- [x] ==🟠Previously done==\n'
 long_text = 'Read one long research paper and take careful notes about the training process, model behavior and the evaluation harness.'
@@ -296,8 +299,9 @@ try:
     assert prefs['folded'] == ['First priority'], prefs
     saved(initial)
     shot('pin-remembered-window')
+    resize_edges(env, wid, scale, out, 'pin-edge-light')
     close()
-    check('Pin/unpin, scaled bounds and folded branches persist after restart')
+    check('Pin/unpin, scaled bounds, folded branches and actual continuous edge resizing work')
     p, wid, file, _ = start('conflicts', '- [ ] First priority\n')
     click(115, 73)
     x('key', 'End')
@@ -371,6 +375,39 @@ try:
     assert max(pixel[:3]) < 65, pixel
     close()
     check('Native Pin renders its dark theme')
+    # Solid checkbox faces and a 3:1 outline contrast are checked from the real pixels.
+    def luminance(rgb):
+        v=[c/255 for c in rgb[:3]]
+        v=[c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4 for c in v]
+        return sum(c*w for c,w in zip(v,[.2126,.7152,.0722]))
+    def contrast(a,b):
+        low,high=sorted([luminance(a),luminance(b)])
+        return (high+.05)/(low+.05)
+    palette='- [ ] ==🟢Green priority==\n- [ ] ==🟡Yellow priority==\n- [ ] <mark style="background: #ec4899;">Pink priority</mark>\n- [ ] ==🔵Blue priority==\n- [ ] Plain priority\n'
+    contrasts=[]
+    for theme in ['Light','Dark']:
+        p,wid,file,_=start('contrast-'+theme,palette,theme=theme)
+        picture=shot('pin-checkboxes-'+theme).convert('RGB')
+        face=(25,25,28) if theme=='Dark' else (252,252,252)
+        for i in range(5):
+            top=round((67+i*47.5)*scale)
+            crop=picture.crop((42*scale,top,59*scale,top+17*scale))
+            colors=Counter(crop.getdata())
+            row_color=picture.getpixel((62*scale,top+8*scale))
+            outline=max((rgb for rgb,count in colors.most_common(8)),key=lambda rgb:contrast(rgb,row_color))
+            ratio=contrast(outline,row_color)
+            record={'theme':theme,'row':i,'outline':outline,'background':row_color,'contrast':round(ratio,2)}
+            contrasts.append(record)
+            assert ratio>=3,record
+            assert colors[face]>=crop.width*crop.height*.4,('Checkbox face is not solid',record,colors.most_common(3))
+        if theme=='Dark':
+            x('windowsize',wid,350*scale,300*scale)
+            x('windowmove',wid,80,60)
+            time.sleep(.3)
+            resize_edges(env,wid,scale,out,'pin-edge-dark',dark=True)
+        close()
+    (out/'checkbox-contrast.json').write_text(json.dumps(contrasts,indent=2)+'\n')
+    check('Checkboxes stay solid with at least 3:1 contrast on five colors in both themes; dark edge resizing retains paint')
     records = []
     for repeat in range(4):
         for kind in ['webview', 'iced']:

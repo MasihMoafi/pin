@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import runpy
 import statistics
 import subprocess
 import sys
@@ -20,6 +21,7 @@ output.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='iced-', dir=output))
 initial = 'Responsibilities\n\nEach agent is responsible for something.\n'
 children = []
+resize_edges=runpy.run_path(str(Path(__file__).with_name("window_checks.py")))["resize"]
 checks = []
 scale = int(os.environ.get('ICED_TEST_SCALE', '1'))
 base_env = dict(os.environ, GDK_BACKEND='x11', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), WEBKIT_DISABLE_COMPOSITING_MODE='1', LIBGL_ALWAYS_SOFTWARE='1', GTK_IM_MODULE='simple', GSETTINGS_BACKEND='keyfile')
@@ -257,6 +259,8 @@ try:
     assert all(geometry(wid)[key] == bounds[key] for key in ['WIDTH', 'HEIGHT', 'X', 'Y'])
     saved(file, typed)
     check('Text and window size/position persist after close and reopen')
+    resize_edges(base_env,wid,scale,output,'notes-edge-light')
+    check('Actual Notes edge drags retain painted content while width and height change')
     # Restore the controlled size for the remaining interaction checks.
     x('windowsize', wid, 430 * scale, 320 * scale)
     time.sleep(.3)

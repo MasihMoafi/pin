@@ -960,7 +960,7 @@ impl State {
                         color: if checked {
                             Color::from_rgb8(45, 151, 148)
                         } else {
-                            Color::from_rgb8(170, 170, 178)
+                            muted(theme)
                         },
                         width: 1.,
                         radius: 4.into(),
