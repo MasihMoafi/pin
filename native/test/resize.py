@@ -35,6 +35,13 @@ bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 # The isolated shell grants screenshots to the media-keys service.
 name = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'RequestName', GLib.Variant('(su)', ('org.gnome.SettingsDaemon.MediaKeys', 0)), None, 0, 3000, None).unpack()[0]
 assert name == 1, 'The hidden desktop must not have an active media-keys service'
+shell_pid = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetConnectionUnixProcessID', GLib.Variant('(s)', ('org.gnome.Shell',)), None, 0, 3000, None).unpack()[0]
+shell_proc = Path(f'/proc/{shell_pid}')
+assert b'--headless' in (shell_proc / 'cmdline').read_bytes(), 'Use the isolated headless shell'
+shell_env = dict(part.split('=', 1) for part in (shell_proc / 'environ').read_bytes().decode().split('\0') if '=' in part)
+assert shell_env.get('GSETTINGS_BACKEND') == 'keyfile', 'Use isolated desktop settings'
+for key, value in [('picture-uri', ''), ('picture-uri-dark', ''), ('primary-color', '#808080'), ('color-shading-type', 'solid')]:
+    subprocess.run(['gsettings', 'set', 'org.gnome.desktop.background', key, value], env=shell_env, check=True)
 session = bus.call_sync('org.gnome.Mutter.RemoteDesktop', '/org/gnome/Mutter/RemoteDesktop', 'org.gnome.Mutter.RemoteDesktop', 'CreateSession', None, None, 0, 3000, None).unpack()[0]
 
 
@@ -124,18 +131,22 @@ def checkboxes(pid):
     print('PASS: checkbox contrast on five row colors in both themes, click, save and undo', flush=True)
 
 
-def black_strip(path):
-    # Capture the window and its bounds atomically in the compositor. Separate
-    # geometry queries can include desktop pixels while the edge is moving.
-    image = Image.open(path).convert('RGBA')
-    image = image.crop((3, 3, image.width - 3, image.height - 3))
-    opaque = sum(image.getchannel('A').histogram()[201:])
-    assert opaque > image.width * image.height / 2, 'The painted app must remain visible'
+def black_strip(path, before, after):
+    # Check the composited desktop: raw window captures can expose transparent
+    # pixels that appear black when converted to RGB. The isolated grey desktop
+    # distinguishes visible black artifacts from space exposed during a drag.
+    left, top = before['X'], before['Y']
+    width = max(before['WIDTH'], after['WIDTH'])
+    height = max(before['HEIGHT'], after['HEIGHT'])
+    image = Image.open(path).convert('RGB').crop((left + 3, top + 3, left + width - 3, top + height - 3))
     pixels = image.load()
-    def black(pixel):
-        return pixel[3] > 200 and max(pixel[:3]) < 12
-    rows = sum(sum(black(pixels[x, y]) for x in range(image.width)) > image.width * .8 for y in range(image.height))
-    columns = sum(sum(black(pixels[x, y]) for y in range(image.height)) > image.height * .8 for x in range(image.width))
+    min_width = min(before['WIDTH'], after['WIDTH']) - 6
+    min_height = min(before['HEIGHT'], after['HEIGHT']) - 6
+    body = image.crop((0, 50 * scale, min_width, min_height))
+    visible = sum(min(pixel) > 210 for pixel in body.getdata())
+    assert visible > body.width * body.height / 2, 'The painted app must remain visible'
+    rows = sum(sum(max(pixels[x, y]) < 12 for x in range(image.width)) > min_width * .8 for y in range(image.height))
+    columns = sum(sum(max(pixels[x, y]) < 12 for y in range(image.height)) > min_height * .8 for x in range(image.width))
     return max(rows, columns)
 
 
@@ -192,9 +203,9 @@ try:
             try:
                 for frame in range(8):
                     before = geometry(wid)
-                    path = screenshot(f'{kind}-{axis}-{frame:02}', window=True)
+                    path = screenshot(f'{kind}-{axis}-{frame:02}')
                     after = geometry(wid)
-                    strip = black_strip(path)
+                    strip = black_strip(path, before, after)
                     records.append({'app': kind, 'axis': axis, 'frame': frame, 'black_strip_pixels': strip, 'before': before, 'after': after})
             finally:
                 stop.set()

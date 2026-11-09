@@ -27,7 +27,9 @@ export default function App(){
   const pendingFocus=useRef<Focus|null>(null);
   const saveTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const statusTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const shown=useRef(false);
   const v=runtime;
+  useLayoutEffect(()=>{if(!shown.current&&(v.loaded||v.error)){shown.current=true;void host.ready();}},[v.loaded,v.error]);
 
   function captureFocus():Focus|null{
     const field=document.activeElement;
@@ -122,7 +124,7 @@ export default function App(){
 
   useEffect(()=>{
     let disposed=false;let off=()=>{};let offTheme=()=>{};
-    void load().then(()=>{if(!disposed)requestAnimationFrame(()=>{void host.ready();});});
+    void load();
     void host.onClose(()=>void requestClose()).then(f=>{if(disposed)f();else off=f;});
     void host.onTheme(dark=>document.documentElement.classList.toggle('dark',dark)).then(f=>{if(disposed)f();else offTheme=f;});
     const tick=setInterval(()=>{
