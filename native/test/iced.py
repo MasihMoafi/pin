@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 
-from PIL import ImageGrab
+from PIL import ImageGrab, ImageChops
 
 baseline = str(Path(sys.argv[1]).resolve())
 variant = str(Path(sys.argv[2]).resolve())
@@ -21,7 +21,8 @@ root = Path(tempfile.mkdtemp(prefix='iced-', dir=output))
 initial = 'Responsibilities\n\nEach agent is responsible for something.\n'
 children = []
 checks = []
-base_env = dict(os.environ, GDK_BACKEND='x11', GDK_SCALE='1', WINIT_X11_SCALE_FACTOR='1', WEBKIT_DISABLE_COMPOSITING_MODE='1', LIBGL_ALWAYS_SOFTWARE='1', GTK_IM_MODULE='simple', GSETTINGS_BACKEND='keyfile')
+scale = int(os.environ.get('ICED_TEST_SCALE', '1'))
+base_env = dict(os.environ, GDK_BACKEND='x11', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), WEBKIT_DISABLE_COMPOSITING_MODE='1', LIBGL_ALWAYS_SOFTWARE='1', GTK_IM_MODULE='simple', GSETTINGS_BACKEND='keyfile')
 
 xlib = c.CDLL('libX11.so.6')
 xtest = c.CDLL('libXtst.so.6')
@@ -56,13 +57,13 @@ def check(label):
     print('PASS', label, flush=True)
 
 
-def start(kind, label, reuse=False, theme=None):
+def start(kind, label, reuse=False, theme=None, contents=initial):
     case = root / label
     config = case / 'config/StickyNotes'
     config.mkdir(parents=True, exist_ok=True)
     file = case / 'Notes.txt'
     if not reuse:
-        file.write_text(initial)
+        file.write_text(contents)
     for prefs in ([] if reuse else ['native.json', 'iced-prototype.json']):
         (config / prefs).write_text(json.dumps({'width': 430, 'height': 320, 'x': 40, 'y': 60, 'pinned': True}))
     env = dict(base_env, XDG_CONFIG_HOME=str(case / 'config'), STICKY_NOTES_FILE=str(file))
@@ -86,7 +87,7 @@ def start(kind, label, reuse=False, theme=None):
 
 def close(p, wid):
     bounds = geometry(wid)
-    click(wid, bounds['WIDTH'] - 25, 21)
+    click(wid, bounds['WIDTH'] // scale - 25, 21)
     p.wait(timeout=8)
     assert p.returncode == 0
 
@@ -96,7 +97,7 @@ def geometry(wid):
 
 
 def click(wid, px, py, button=1):
-    x('mousemove', '--window', wid, px, py, 'click', button)
+    x('mousemove', '--window', wid, px * scale, py * scale, 'click', button)
     time.sleep(.15)
 
 
@@ -246,7 +247,7 @@ try:
     click(wid, 349, 21)
     wait(above, 'Repin changes real window state')
     check('Pin and unpin control the real window manager state')
-    x('windowsize', wid, 350, 260)
+    x('windowsize', wid, 350 * scale, 260 * scale)
     x('windowmove', wid, 80, 90)
     time.sleep(.4)
     bounds = geometry(wid)
@@ -257,7 +258,7 @@ try:
     saved(file, typed)
     check('Text and window size/position persist after close and reopen')
     # Restore the controlled size for the remaining interaction checks.
-    x('windowsize', wid, 430, 320)
+    x('windowsize', wid, 430 * scale, 320 * scale)
     time.sleep(.3)
     click(wid, 100, 120)
     x('key', 'ctrl+a', 'shift+F10')
@@ -286,14 +287,14 @@ try:
     file.write_text('Changed elsewhere\n')
     time.sleep(.9)
     shot('iced-conflict')
-    click(wid, 160, 105)
+    click(wid, 128, 92)
     saved(file, typed + ' local draft')
     click(wid, 100, 120)
     x('key', 'ctrl+End')
     x('type', '--clearmodifiers', '--delay', 1, ' another draft')
     file.write_text('Disk version\n')
     time.sleep(.9)
-    click(wid, 50, 105)
+    click(wid, 45, 92)
     saved(file, 'Disk version\n')
     click(wid, 100, 120)
     x('key', 'ctrl+End')
@@ -307,6 +308,26 @@ try:
     pixel = ImageGrab.grab(xdisplay=base_env['DISPLAY']).getpixel((bounds['X'] + 30, bounds['Y'] + bounds['HEIGHT'] - 35))
     assert 15 <= pixel[0] <= 45 and 15 <= pixel[1] <= 45 and 15 <= pixel[2] <= 45, pixel
     check('Native dark theme reaches the rendered window')
+    close(p, wid)
+    long_note = '\n'.join(f'{i:03} - ' + str(i % 10) * 30 for i in range(200)) + '\nLast thought'
+    p, wid, file, _ = start('iced', 'long', contents=long_note)
+    click(wid, 100, 120)
+    x('key', 'ctrl+End')
+    time.sleep(.3)
+    bounds = geometry(wid)
+    body = (bounds['X'] + 10 * scale, bounds['Y'] + 55 * scale, bounds['X'] + bounds['WIDTH'] - 10 * scale, bounds['Y'] + bounds['HEIGHT'] - 10 * scale)
+    before = ImageGrab.grab(xdisplay=base_env['DISPLAY']).crop(body)
+    shot('iced-long-before')
+    x('type', '--clearmodifiers', '--delay', 10, ' appended')
+    saved(file, long_note + ' appended')
+    physical(52)
+    saved(file, long_note)
+    time.sleep(.3)
+    after = ImageGrab.grab(xdisplay=base_env['DISPLAY']).crop(body)
+    changed_pixels = sum(max(pixel[:3]) > 8 for pixel in ImageChops.difference(before, after).getdata())
+    shot('iced-long-after')
+    assert changed_pixels < 128 * scale * scale, ('Undo changed the editor viewport', changed_pixels)
+    check('Undo restores the long note and keeps the visible scroll position')
     close(p, wid)
     results = []
     for repeat in range(4):

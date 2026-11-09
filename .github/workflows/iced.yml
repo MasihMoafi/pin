@@ -56,7 +56,8 @@ jobs:
             xprop -root _NET_SUPPORTING_WM_CHECK | rg -q 'window id #' && break
             sleep 0.1
           done
-          dbus-run-session -- /usr/bin/python3 -I native/test/iced.py baseline/pin-native native/target/release/notes-iced iced-results
+          dbus-run-session -- /usr/bin/python3 -I native/test/iced.py baseline/pin-native native/target/release/notes-iced iced-results/scale1
+          ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/iced.py baseline/pin-native native/target/release/notes-iced iced-results/scale2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
