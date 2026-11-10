@@ -171,8 +171,8 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                     xlib::XA_CARDINAL,
                     32,
                     xlib::PropModeReplace,
-                    [counter, counter].as_ptr().cast(),
-                    2,
+                    (&counter as *const c_ulong).cast(),
+                    1,
                 );
                 list.push(request);
                 (xlib.XSetWMProtocols)(display, window, list.as_mut_ptr(), list.len() as c_int);
@@ -231,35 +231,14 @@ pub fn frame<'a, Message: 'a>() -> Element<'a, Message> {
             _: mouse::Cursor,
             _: &Rectangle,
         ) {
-            let begin = STATE.with(|slot| {
+            STATE.with(|slot| {
                 if let Some(state) = slot.borrow_mut().as_mut() {
                     state.drawn = state
                         .pending
                         .as_ref()
                         .map(|value| (layout.bounds().size(), value.hi, value.lo));
-                    if let Some(value) = &state.pending {
-                        let serial = ((value.hi as u64) << 32) | u64::from(value.lo);
-                        let serial = serial.saturating_sub(1);
-                        return Some((
-                            state.display,
-                            state.counter,
-                            sync::XSyncValue {
-                                hi: (serial >> 32) as i32,
-                                lo: serial as u32,
-                            },
-                            state.sync.XSyncSetCounter,
-                            state.xlib.XFlush,
-                        ));
-                    }
                 }
-                None
             });
-            if let Some((display, counter, value, set_counter, flush)) = begin {
-                unsafe {
-                    set_counter(display, counter, value);
-                    flush(display);
-                }
-            }
         }
     }
     Element::new(Frame)

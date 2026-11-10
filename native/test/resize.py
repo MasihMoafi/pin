@@ -82,7 +82,7 @@ def control_key(code):
 
 def selection():
     control_key(46)  # C
-    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-out'], env=env, timeout=5)
+    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-target', 'UTF8_STRING', '-out'], env=env, timeout=5)
 
 
 def screenshot(name, window=False):
@@ -216,6 +216,9 @@ resources = []
 children = []
 input_event('Start')
 input_event('NotifyPointerMotionRelative', '(dd)', (-10000., -10000.))
+# Let Mutter initialize the virtual keyboard before sending editor shortcuts.
+input_event('NotifyKeyboardKeycode', '(ub)', (1, True))
+input_event('NotifyKeyboardKeycode', '(ub)', (1, False))
 time.sleep(.1)
 try:
     for kind, binary in [('pin', pin), ('notes', notes)]:
@@ -248,6 +251,7 @@ try:
             move(g['X'] + 130 * scale, g['Y'] + 73 * scale)
             input_event('NotifyPointerButton', '(ib)', (272, True))
             input_event('NotifyPointerButton', '(ib)', (272, False))
+            time.sleep(.2)
             control_key(30)  # A
             selected = selection()
             assert selected, 'Select the real editor text before resizing'
@@ -282,7 +286,7 @@ try:
             thread = threading.Thread(target=motion)
             thread.start()
             try:
-                for frame in range(8):
+                for frame in range(32 if axis == 'top-left' else 8):
                     before = geometry(wid)
                     path = screenshot(f'{kind}-{axis}-{frame:02}')
                     after = geometry(wid)
