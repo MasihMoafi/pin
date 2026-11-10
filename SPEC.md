@@ -28,7 +28,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 - The task options offer daily recurrence; completed daily tasks reopen on the next local date, preserving any time.
 - Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
   Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
-- Each row has a checkbox, text and ⋯ (daily recurrence, color, date, subtask, delete).
+- Each row has a checkbox, text and ⋯ (daily recurrence, color, date, subtask, delete). Options open as dropdown menus over the list; dates use a month calendar and times use hour/minute dropdowns, following Elpis Automations.
 - Checkboxes have a clear gap before the text; chevrons, checkboxes and trailing controls share the center of the first text line, including wrapped tasks. Separate rows have visible space between them.
 - Unchecked shadcn checkboxes keep a solid background and an outline with at least 3:1 contrast against task colors in light and dark themes.
 - A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
@@ -46,7 +46,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 Both Rust apps provide toolbar Undo, Redo and Save. Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and Ctrl+S call the same actions under English and Persian keyboard layouts. Sticky Notes is a plain text scratch pad.
 
 Drive the native executables with `native/test/pin_iced.py` and `native/test/iced.py` on a hidden display; see `native/README.md`. `native/test/desktop.py` covers the previous WebView version.
-On an isolated GNOME Wayland desktop, `native/test/resize.py PIN NOTES OUTPUT` captures continuous edge drags and checks checkbox contrast, completion and undo. Resizing must retain the painted contents without black frames or edges.
+On an isolated GNOME Wayland desktop, `native/test/resize.py PIN NOTES OUTPUT` captures continuous edge drags and checks checkbox contrast, completion and undo. Resizing must retain the painted contents without black frames or edges. During a fast top-left drag, the painted bottom-right corner stays fixed, including when the minimum size is reached.
 
 Against the app on a hidden display with `--remote-debugging-port=9377`, run `python3 test/e2e.py <scratch list>`.
 Run `python3 test/sync_e2e.py <scratch list> 9377 <screenshot directory>` for conflicts, reload, theme and contrast;

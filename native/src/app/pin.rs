@@ -1,15 +1,15 @@
 use super::{bg, fg, focus_style, icon_button, icon_data, line, muted, Group};
 use crate::board::{valid_date, Board, Task as Item, COLORS};
-use chrono::{Local, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Days, Local, Months, NaiveDate, NaiveDateTime};
 use iced::keyboard::{
     self,
     key::{Code, Named, Physical},
 };
 use iced::widget::{
     button, checkbox, column, container, keyed_column, mouse_area, operation, row, scrollable,
-    space, svg, text, text_editor,
+    space, stack, svg, text, text_editor,
 };
-use iced::{Border, Color, Element, Fill, Length, Task, Theme};
+use iced::{Border, Color, Element, Fill, Length, Padding, Point, Size, Task, Theme};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
@@ -61,6 +61,11 @@ pub enum Message {
     Move(u64, bool),
     Options(u64),
     CloseOptions,
+    Panel(Panel),
+    Month(bool),
+    CalendarMove(i32),
+    PickDate(NaiveDate),
+    TimePart(bool, String),
     Daily,
     Color(Option<String>),
     ApplyDate,
@@ -89,6 +94,16 @@ pub enum Message {
     Tick,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panel {
+    Main,
+    Date,
+    Time,
+    Color,
+    Hours,
+    Minutes,
+}
+
 struct Options {
     id: u64,
     date: text_editor::Content,
@@ -97,6 +112,9 @@ struct Options {
     focus: u8,
     offset: scrollable::AbsoluteOffset,
     error: Option<(String, Instant)>,
+    panel: Panel,
+    calendar: NaiveDate,
+    anchor: Point,
 }
 struct EditorSnapshot {
     text: String,
@@ -120,14 +138,7 @@ pub struct Snapshot {
     editors: BTreeMap<u64, EditorSnapshot>,
     folded: HashSet<u64>,
     active: Target,
-    options: Option<(
-        u64,
-        EditorSnapshot,
-        EditorSnapshot,
-        EditorSnapshot,
-        u8,
-        scrollable::AbsoluteOffset,
-    )>,
+    options: Option<Options>,
     offset: scrollable::AbsoluteOffset,
 }
 pub struct State {
@@ -203,15 +214,17 @@ impl State {
                 .collect(),
             folded: self.folded.clone(),
             active: self.active,
-            options: self.options.as_ref().map(|o| {
-                (
-                    o.id,
-                    EditorSnapshot::new(&o.date),
-                    EditorSnapshot::new(&o.time),
-                    EditorSnapshot::new(&o.color),
-                    o.focus,
-                    o.offset,
-                )
+            options: self.options.as_ref().map(|o| Options {
+                id: o.id,
+                date: EditorSnapshot::new(&o.date).restore(),
+                time: EditorSnapshot::new(&o.time).restore(),
+                color: EditorSnapshot::new(&o.color).restore(),
+                focus: o.focus,
+                offset: o.offset,
+                panel: o.panel,
+                calendar: o.calendar,
+                anchor: o.anchor,
+                error: None,
             }),
             offset: self.offset,
         }
@@ -226,17 +239,7 @@ impl State {
             .collect();
         self.folded = snapshot.folded;
         self.active = snapshot.active;
-        self.options = snapshot
-            .options
-            .map(|(id, d, t, c, focus, offset)| Options {
-                id,
-                date: d.restore(),
-                time: t.restore(),
-                color: c.restore(),
-                focus,
-                offset,
-                error: None,
-            });
+        self.options = snapshot.options;
         self.offset = snapshot.offset;
         self.dragging = None;
         self.drop = None;
@@ -250,12 +253,12 @@ impl State {
         ])
     }
     pub fn focus(&self) -> Task<Message> {
-        if self
-            .options
-            .as_ref()
-            .is_some_and(|o| !matches!(o.focus, 1 | 2 | 18))
-        {
-            return Task::none();
+        if let Some(o) = &self.options {
+            return if o.panel == Panel::Color && o.focus == 18 {
+                operation::focus(Target::Color.id())
+            } else {
+                operation::focus("pin-menu")
+            };
         }
         operation::focus(self.active.id())
     }
@@ -264,9 +267,7 @@ impl State {
             (
                 OPTIONS,
                 match o.focus {
-                    1 => Target::Date.id(),
-                    2 => Target::Time.id(),
-                    18 => Target::Color.id(),
+                    18 if o.panel == Panel::Color => Target::Color.id(),
                     n => format!("option-{n}"),
                 },
             )
@@ -502,16 +503,106 @@ impl State {
                         focus: 1,
                         offset: scrollable::AbsoluteOffset::default(),
                         error: None,
+                        panel: Panel::Main,
+                        calendar: NaiveDate::parse_from_str(d, "%Y-%m-%d")
+                            .unwrap_or_else(|_| Local::now().date_naive()),
+                        anchor: Point::new(f32::MAX, 8.),
                     });
-                    self.active = Target::Date;
+                    self.active = Target::Item(id);
                     return self.focus_and_reveal();
                 }
             }
             Message::CloseOptions => {
+                if self
+                    .options
+                    .as_ref()
+                    .is_some_and(|o| o.panel != Panel::Main)
+                {
+                    return self.update(Message::Panel(Panel::Main));
+                }
                 let id = self.options_item();
                 self.options = None;
                 self.active = Target::Item(id);
                 return operation::scroll_to(LIST, self.offset).chain(self.focus_and_reveal());
+            }
+            Message::Panel(panel) => {
+                if let Some(o) = &mut self.options {
+                    o.panel = panel;
+                    o.focus = match panel {
+                        Panel::Main => 1,
+                        Panel::Date => 32 + o.calendar.day() as u8 - 1,
+                        Panel::Time => 25,
+                        Panel::Color => 5,
+                        Panel::Hours => {
+                            64 + o
+                                .time
+                                .text()
+                                .trim()
+                                .get(..2)
+                                .and_then(|s| s.parse::<u8>().ok())
+                                .unwrap_or(9)
+                        }
+                        Panel::Minutes => {
+                            64 + o
+                                .time
+                                .text()
+                                .trim()
+                                .get(3..5)
+                                .and_then(|s| s.parse::<u8>().ok())
+                                .unwrap_or(0)
+                        }
+                    };
+                    o.offset = scrollable::AbsoluteOffset::default();
+                    return operation::scroll_to(OPTIONS, o.offset).chain(self.focus());
+                }
+            }
+            Message::Month(next) => {
+                if let Some(o) = &mut self.options {
+                    o.calendar = if next {
+                        o.calendar.checked_add_months(Months::new(1))
+                    } else {
+                        o.calendar.checked_sub_months(Months::new(1))
+                    }
+                    .unwrap_or(o.calendar);
+                    o.focus = 32 + o.calendar.day() as u8 - 1;
+                }
+            }
+            Message::CalendarMove(delta) => {
+                if let Some(o) = &mut self.options {
+                    if o.panel == Panel::Date {
+                        o.calendar = if delta >= 0 {
+                            o.calendar.checked_add_days(Days::new(delta as u64))
+                        } else {
+                            o.calendar.checked_sub_days(Days::new((-delta) as u64))
+                        }
+                        .unwrap_or(o.calendar);
+                        o.focus = 32 + o.calendar.day() as u8 - 1;
+                    }
+                }
+            }
+            Message::PickDate(date) => {
+                if let Some(o) = &mut self.options {
+                    o.date = text_editor::Content::with_text(&date.format("%Y-%m-%d").to_string());
+                    o.calendar = date;
+                }
+                let task = self.update(Message::ApplyDate);
+                return task.chain(self.update(Message::Panel(Panel::Main)));
+            }
+            Message::TimePart(hour, value) => {
+                if let Some(o) = &mut self.options {
+                    let current = o.time.text();
+                    let (h, m) = current.trim().split_once(':').unwrap_or(("09", "00"));
+                    o.time = text_editor::Content::with_text(&if hour {
+                        format!("{value}:{m}")
+                    } else {
+                        format!("{h}:{value}")
+                    });
+                    if o.date.text().trim().is_empty() {
+                        o.date = text_editor::Content::with_text(&self.today);
+                    }
+                }
+                let save = self.update(Message::ApplyDate);
+                return save.chain(self.update(Message::Panel(Panel::Time)));
             }
             Message::Daily => {
                 let id = self.options_item();
@@ -574,16 +665,12 @@ impl State {
                 }
             }
             Message::OptionsTab(reverse) => {
+                let order = self.option_order();
                 if let Some(o) = &mut self.options {
-                    o.focus = if reverse {
-                        (o.focus + 22) % 23
-                    } else {
-                        (o.focus + 1) % 23
-                    };
+                    let at = order.iter().position(|n| *n == o.focus).unwrap_or(0);
+                    o.focus = order[(at + if reverse { order.len() - 1 } else { 1 }) % order.len()];
                     let target = match o.focus {
-                        1 => Some(Target::Date),
-                        2 => Some(Target::Time),
-                        18 => Some(Target::Color),
+                        18 if o.panel == Panel::Color => Some(Target::Color),
                         _ => None,
                     };
                     if let Some(target) = target {
@@ -711,18 +798,63 @@ impl State {
         }
     }
     fn option_action(&self, focus: u8) -> Option<Message> {
+        let o = self.options.as_ref()?;
         Some(match focus {
             0 => Message::Daily,
+            1 => Message::Panel(Panel::Date),
+            2 => Message::Panel(Panel::Time),
             3 => Message::ApplyDate,
             4 => Message::ClearDate,
             5..=16 => Message::Color(Some(COLORS[(focus - 5) as usize].0.into())),
             17 => Message::Color(None),
+            18 if o.panel == Panel::Main => Message::Panel(Panel::Color),
             19 => Message::ApplyColor,
             20 => Message::New(true),
             21 => Message::Remove(self.options_item()),
             22 => Message::CloseOptions,
+            23 => Message::Month(false),
+            24 => Message::Month(true),
+            25 => Message::Panel(Panel::Hours),
+            26 => Message::Panel(Panel::Minutes),
+            64..=123 if matches!(o.panel, Panel::Hours | Panel::Minutes) => {
+                Message::TimePart(o.panel == Panel::Hours, format!("{:02}", focus - 64))
+            }
+            32..=62 => Message::PickDate(o.calendar.with_day((focus - 31) as u32)?),
             _ => return None,
         })
+    }
+
+    fn option_order(&self) -> Vec<u8> {
+        let Some(o) = &self.options else {
+            return vec![];
+        };
+        match o.panel {
+            Panel::Main => vec![0, 1, 2, 18, 20, 21, 22],
+            Panel::Date => {
+                let mut order = vec![22, 23, 24];
+                order.extend(
+                    (1..=31).filter_map(|day| o.calendar.with_day(day).map(|_| day as u8 + 31)),
+                );
+                order.push(4);
+                order
+            }
+            Panel::Time => vec![22, 25, 26],
+            Panel::Hours => (64..88).chain([22]).collect(),
+            Panel::Minutes => (64..124).chain([22]).collect(),
+            Panel::Color => (5..=19).chain([22]).collect(),
+        }
+    }
+
+    pub fn calendar_open(&self) -> bool {
+        self.options
+            .as_ref()
+            .is_some_and(|o| o.panel == Panel::Date)
+    }
+
+    pub fn anchor_options(&mut self, pointer: Point) {
+        if let Some(o) = &mut self.options {
+            o.anchor = Point::new(pointer.x, (pointer.y - 38.).max(6.));
+        }
     }
 
     fn binding(
@@ -813,10 +945,7 @@ impl State {
         B::from_key_press(press)
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
-        if self.options.is_some() {
-            return self.options_view();
-        }
+    pub fn view(&self, size: Size) -> Element<'_, Message> {
         let mut hidden = None;
         let mut visible = vec![];
         for (i, t) in self.board.tasks.iter().enumerate() {
@@ -855,7 +984,7 @@ impl State {
             .on_enter(last.map_or(Message::CancelDrag, |id| Message::Over(id, true)))
             .on_exit(last.map_or(Message::CancelDrag, Message::Leave));
         body = body.push(footer);
-        container(
+        let list = container(
             scrollable(body)
                 .id(LIST)
                 .direction(scrollable::Direction::Vertical(
@@ -869,7 +998,44 @@ impl State {
             ..Default::default()
         })
         .width(Fill)
-        .height(Fill)
+        .height(Fill);
+        let Some(o) = &self.options else {
+            return list.into();
+        };
+        let width = 270_f32.min(size.width - 20.);
+        let height = match o.panel {
+            Panel::Main => 260.,
+            Panel::Date => 350.,
+            Panel::Time => 130.,
+            Panel::Color => 235.,
+            Panel::Hours | Panel::Minutes => 260.,
+        }
+        .min((size.height - 60.).max(80.));
+        let left = o.anchor.x.min((size.width - width - 10.).max(10.)).max(10.);
+        let top = o.anchor.y.min((size.height - height - 50.).max(6.)).max(6.);
+        let menu = container(self.options_view())
+            .id("pin-menu")
+            .width(width)
+            .max_height(height)
+            .style(|theme| container::Style {
+                background: Some(bg(theme).into()),
+                border: Border {
+                    color: line(theme),
+                    width: 1.,
+                    radius: 6.into(),
+                },
+                ..Default::default()
+            });
+        stack![
+            list,
+            mouse_area(container(space()).width(Fill).height(Fill)).on_press(Message::CloseOptions),
+            container(menu).padding(Padding {
+                left,
+                top,
+                right: 0.,
+                bottom: 0.
+            })
+        ]
         .into()
     }
     fn task_view<'a>(&'a self, i: usize, t: &'a Item) -> Element<'a, Message> {
@@ -1075,10 +1241,10 @@ impl State {
             .on_right_press(Message::Context(target))
             .into()
     }
-    fn option_button<'a>(&'a self, label: &'a str, focus: u8) -> Element<'a, Message> {
+    fn option_button<'a>(&'a self, label: impl Into<String>, focus: u8) -> Element<'a, Message> {
         let focused = self.options.as_ref().is_some_and(|o| o.focus == focus);
         container(
-            button(text(label).size(13))
+            button(text(label.into()).size(13))
                 .padding([6, 9])
                 .on_press_maybe(self.option_action(focus))
                 .style(move |theme, status| focus_style(theme, status, focused)),
@@ -1092,97 +1258,191 @@ impl State {
             return space().into();
         };
         let item = &self.board.tasks[i];
-        let mut body = column![
-            row![
-                text("Task options").size(14),
-                space().width(Fill),
-                self.option_button("Close", 22)
-            ]
-            .align_y(iced::Center),
-            text(&item.text).size(13),
-            self.option_button(
-                if item.daily {
-                    "✓ Repeat daily"
-                } else {
-                    "Repeat daily"
-                },
-                0
-            ),
-            text("Date and time").size(12),
-            row![
-                container(self.field(Target::Date, "YYYY-MM-DD")).width(Fill),
-                container(self.field(Target::Time, "HH:MM")).width(90)
-            ]
-            .spacing(8),
-            row![
-                self.option_button("Apply date", 3),
-                self.option_button("Clear date", 4)
-            ]
-            .spacing(5),
-            text("Color").size(12),
-        ]
-        .spacing(10)
-        .padding(16);
-        for colors in COLORS.chunks(6).enumerate() {
-            let swatches = row(colors.1.iter().enumerate().map(|(j, (marker, hex))| {
-                let selected = item.color.as_deref() == Some(*marker);
-                let focus = 5 + (colors.0 * 6 + j) as u8;
-                let focused = o.focus == focus;
-                let color = hex_color(hex);
-                let action = Message::Color(Some((*marker).into()));
-                container(
-                    button(
-                        container(
-                            text(if selected { "✓" } else { "" })
-                                .size(14)
-                                .color(Color::from_rgb8(20, 20, 20)),
-                        )
-                        .center(26),
+        let mut body = column![].spacing(4).padding(8);
+        match o.panel {
+            Panel::Main => {
+                body = body
+                    .push(self.option_button(
+                        if item.daily {
+                            "✓ Repeat daily"
+                        } else {
+                            "Repeat daily"
+                        },
+                        0,
+                    ))
+                    .push(
+                        self.option_button(
+                            &item
+                                .date
+                                .as_ref()
+                                .map_or_else(|| "Date…".into(), |d| display_date(d)),
+                            1,
+                        ),
                     )
-                    .on_press(action)
-                    .padding(2)
-                    .style(move |theme, status| {
-                        let mut s = focus_style(theme, status, focused);
-                        s.background = Some(color.into());
-                        s.border = Border {
-                            color: if selected || focused {
-                                fg(theme)
-                            } else {
-                                Color::TRANSPARENT
-                            },
-                            width: if selected || focused { 2. } else { 0. },
-                            radius: 5.into(),
+                    .push(self.option_button("Time…", 2))
+                    .push(self.option_button("Color…", 18))
+                    .push(self.option_button("Add subtask", 20))
+                    .push(self.option_button("Delete task", 21))
+                    .push(self.option_button("Close", 22));
+            }
+            Panel::Date => {
+                body = body.push(
+                    row![
+                        self.option_button("‹", 23),
+                        container(text(o.calendar.format("%B %Y").to_string()).size(13))
+                            .center_x(Fill),
+                        self.option_button("›", 24),
+                        self.option_button("Back", 22),
+                    ]
+                    .align_y(iced::Center),
+                );
+                let mut weekdays = row![].spacing(2);
+                for day in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] {
+                    weekdays = weekdays
+                        .push(container(text(day).size(11).color(super::MUTED)).center_x(Fill));
+                }
+                body = body.push(weekdays);
+                let first = o.calendar.with_day(1).unwrap();
+                let offset = first.weekday().num_days_from_monday() as i32;
+                for week in 0..6 {
+                    let mut days = row![].spacing(2);
+                    for weekday in 0..7 {
+                        let day = week * 7 + weekday - offset + 1;
+                        let date = (day > 0).then(|| first.with_day(day as u32)).flatten();
+                        let cell: Element<'_, Message> = if let Some(date) = date {
+                            let selected =
+                                o.date.text().trim() == date.format("%Y-%m-%d").to_string();
+                            let focused = o.focus == day as u8 + 31;
+                            let today = date.format("%Y-%m-%d").to_string() == self.today;
+                            container(
+                                button(container(text(day.to_string()).size(12)).center_x(Fill))
+                                    .height(28)
+                                    .width(Fill)
+                                    .padding(2)
+                                    .on_press(Message::PickDate(date))
+                                    .style(move |theme, status| {
+                                        let mut style = focus_style(theme, status, focused);
+                                        if selected {
+                                            style.background =
+                                                Some(Color::from_rgba8(45, 151, 148, 0.2).into());
+                                        }
+                                        if today || focused || selected {
+                                            style.border = Border {
+                                                color: if selected {
+                                                    Color::from_rgb8(45, 151, 148)
+                                                } else {
+                                                    muted(theme)
+                                                },
+                                                width: 1.,
+                                                radius: 5.into(),
+                                            };
+                                        }
+                                        style
+                                    }),
+                            )
+                            .id(format!("option-{}", day + 31))
+                            .width(Fill)
+                            .into()
+                        } else {
+                            space().width(Fill).height(28).into()
                         };
-                        s
-                    }),
-                )
-                .id(format!("option-{focus}"))
-                .into()
-            }))
-            .spacing(8);
-            body = body.push(swatches);
+                        days = days.push(cell);
+                    }
+                    body = body.push(days);
+                }
+                body = body.push(self.option_button("Clear date", 4));
+            }
+            Panel::Time => {
+                let value = o.time.text();
+                let (h, m) = value.trim().split_once(':').unwrap_or(("09", "00"));
+                body = body.push(
+                    row![
+                        text("Time").size(13),
+                        space().width(Fill),
+                        self.option_button("Back", 22)
+                    ]
+                    .align_y(iced::Center),
+                );
+                body = body.push(
+                    row![
+                        self.option_button(h, 25),
+                        text(":").size(14),
+                        self.option_button(m, 26),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Center),
+                );
+            }
+            Panel::Hours | Panel::Minutes => {
+                body = body.push(self.option_button("Back", 22));
+                for n in 0..if o.panel == Panel::Hours { 24 } else { 60 } {
+                    body = body.push(self.option_button(format!("{n:02}"), n + 64));
+                }
+            }
+
+            Panel::Color => {
+                body = body.push(
+                    row![
+                        text("Color").size(13),
+                        space().width(Fill),
+                        self.option_button("Back", 22)
+                    ]
+                    .align_y(iced::Center),
+                );
+                for (n, colors) in COLORS.chunks(6).enumerate() {
+                    let swatches = row(colors.iter().enumerate().map(|(j, (marker, hex))| {
+                        let selected = item.color.as_deref() == Some(*marker);
+                        let focus = 5 + (n * 6 + j) as u8;
+                        let focused = o.focus == focus;
+                        let color = hex_color(hex);
+                        container(
+                            button(
+                                container(
+                                    text(if selected { "✓" } else { "" })
+                                        .size(14)
+                                        .color(Color::from_rgb8(20, 20, 20)),
+                                )
+                                .center(26),
+                            )
+                            .on_press(Message::Color(Some((*marker).into())))
+                            .padding(2)
+                            .style(move |theme, status| {
+                                let mut s = focus_style(theme, status, focused);
+                                s.background = Some(color.into());
+                                s.border = Border {
+                                    color: if selected || focused {
+                                        fg(theme)
+                                    } else {
+                                        Color::TRANSPARENT
+                                    },
+                                    width: if selected || focused { 2. } else { 0. },
+                                    radius: 5.into(),
+                                };
+                                s
+                            }),
+                        )
+                        .id(format!("option-{focus}"))
+                        .into()
+                    }))
+                    .spacing(8);
+                    body = body.push(swatches);
+                }
+                body = body.push(self.option_button("No color", 17)).push(
+                    row![
+                        container(self.field(Target::Color, "#rrggbb")).width(Fill),
+                        self.option_button("Apply", 19)
+                    ]
+                    .spacing(8),
+                );
+            }
         }
-        body = body.push(self.option_button("No color", 17)).push(
-            row![
-                container(self.field(Target::Color, "#rrggbb")).width(Fill),
-                self.option_button("Apply color", 19)
-            ]
-            .spacing(8),
-        );
         if let Some((error, _)) = &o.error {
             body = body.push(text(error).size(12).color(Color::from_rgb8(194, 65, 65)));
         }
-        body = body.push(
-            row![
-                self.option_button("Add subtask", 20),
-                self.option_button("Delete task", 21)
-            ]
-            .spacing(8),
-        );
         scrollable(body)
             .id(OPTIONS)
             .on_scroll(Message::OptionsScroll)
-            .height(Fill)
+            .height(Length::Shrink)
             .into()
     }
 }
@@ -1283,6 +1543,49 @@ mod tests {
         assert_eq!(s.markdown(), original);
         assert_eq!(s.selection().as_deref(), Some("Parent"));
         assert!(s.folded.contains(&1));
+    }
+
+    #[test]
+    fn calendar_navigation_does_not_save_until_a_day_is_picked() {
+        let mut s = State::new("- [ ] First 📅 2028-01-31 09:30\n", &[]);
+        let _ = s.update(Message::Options(1));
+        let _ = s.update(Message::Panel(Panel::Date));
+        let original = s.markdown();
+        let _ = s.update(Message::Month(true));
+        assert_eq!(
+            s.options.as_ref().unwrap().calendar.to_string(),
+            "2028-02-29"
+        );
+        assert_eq!(s.markdown(), original);
+        let _ = s.update(Message::Activate);
+        assert_eq!(s.board.tasks[0].date.as_deref(), Some("2028-02-29 09:30"));
+        assert_eq!(s.options.as_ref().unwrap().panel, Panel::Main);
+        let _ = s.update(Message::Panel(Panel::Date));
+        let _ = s.update(Message::CalendarMove(1));
+        assert_eq!(
+            s.options.as_ref().unwrap().calendar.to_string(),
+            "2028-03-01"
+        );
+        let _ = s.update(Message::CloseOptions);
+        assert_eq!(s.board.tasks[0].date.as_deref(), Some("2028-02-29 09:30"));
+    }
+
+    #[test]
+    fn time_dropdown_preserves_date_and_an_undated_task_gets_today() {
+        let mut s = State::new("- [ ] First\n", &[]);
+        let _ = s.update(Message::Options(1));
+        let _ = s.update(Message::TimePart(true, "14".into()));
+        assert_eq!(
+            s.board.tasks[0].date.as_deref(),
+            Some(format!("{} 14:00", s.today).as_str())
+        );
+        let _ = s.update(Message::TimePart(false, "35".into()));
+        assert_eq!(
+            s.board.tasks[0].date.as_deref(),
+            Some(format!("{} 14:35", s.today).as_str())
+        );
+        let _ = s.update(Message::ClearDate);
+        assert!(s.board.tasks[0].date.is_none());
     }
 
     #[test]

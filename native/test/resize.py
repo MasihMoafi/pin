@@ -22,7 +22,7 @@ import time
 import gi
 gi.require_version('Atspi', '2.0')
 from gi.repository import Atspi, Gio, GLib
-from PIL import Image
+from PIL import Image, ImageChops
 
 pin, notes = (str(Path(p).resolve()) for p in sys.argv[1:3])
 output = Path(sys.argv[3]).resolve()
@@ -175,13 +175,13 @@ def black_strip(path, before, after):
     # Check the composited desktop: raw window captures can expose transparent
     # pixels that appear black when converted to RGB. The isolated grey desktop
     # distinguishes visible black artifacts from space exposed during a drag.
-    left, top = before['X'], before['Y']
-    width = max(before['WIDTH'], after['WIDTH'])
-    height = max(before['HEIGHT'], after['HEIGHT'])
+    left, top = max(before['X'], after['X']), max(before['Y'], after['Y'])
+    width = min(before['X'] + before['WIDTH'], after['X'] + after['WIDTH']) - left
+    height = min(before['Y'] + before['HEIGHT'], after['Y'] + after['HEIGHT']) - top
     image = Image.open(path).convert('RGB').crop((left + 3, top + 3, left + width - 3, top + height - 3))
     pixels = image.load()
-    min_width = min(before['WIDTH'], after['WIDTH']) - 6
-    min_height = min(before['HEIGHT'], after['HEIGHT']) - 6
+    min_width = width - 6
+    min_height = height - 6
     body = image.crop((0, 50 * scale, min_width, min_height))
     dark = os.environ.get('ICED_THEME') == 'Dark'
     visible = sum((min(pixel) >= 15 and max(pixel) < 80) if dark else min(pixel) > 210 for pixel in body.getdata())
@@ -221,10 +221,15 @@ try:
                 native_checkboxes(wid)
             else:
                 checkboxes(process.pid)
-        for axis in ['width', 'height']:
+        for axis in ['width', 'height', 'top-left']:
             g = geometry(wid)
-            sx = g['X'] + g['WIDTH'] - 2
-            sy = g['Y'] + (g['HEIGHT'] // 2 if axis == 'width' else g['HEIGHT'] - 2)
+            if axis == 'top-left':
+                x('windowmove', wid, 550 * scale, 450 * scale)
+                x('windowsize', wid, 430 * scale, 360 * scale)
+                time.sleep(.3)
+                g = geometry(wid)
+            sx = g['X'] + (10 * scale if axis == 'top-left' else g['WIDTH'] - 2)
+            sy = g['Y'] + (10 * scale if axis == 'top-left' else g['HEIGHT'] // 2 if axis == 'width' else g['HEIGHT'] - 2)
             move(sx, sy)
             time.sleep(.1)
             input_event('NotifyPointerButton', '(ib)', (272, True))
@@ -236,8 +241,8 @@ try:
                 began = time.monotonic()
                 try:
                     while not stop.is_set():
-                        delta = 100 * scale * math.sin((time.monotonic() - began) * 6)
-                        move(sx + delta if axis == 'width' else sx, sy if axis == 'width' else sy + delta)
+                        delta = (280 if axis == 'top-left' else 100) * scale * math.sin((time.monotonic() - began) * 6)
+                        move(sx + delta if axis in ['width', 'top-left'] else sx, sy if axis == 'width' else sy + delta)
                         time.sleep(.016)
                 except BaseException as error:
                     failures.append(error)
@@ -250,7 +255,16 @@ try:
                     path = screenshot(f'{kind}-{axis}-{frame:02}')
                     after = geometry(wid)
                     strip = black_strip(path, before, after)
-                    records.append({'app': kind, 'axis': axis, 'frame': frame, 'black_strip_pixels': strip, 'before': before, 'after': after})
+                    record = {'app': kind, 'axis': axis, 'frame': frame, 'black_strip_pixels': strip, 'before': before, 'after': after}
+                    if axis == 'top-left':
+                        picture = Image.open(path).convert('RGB')
+                        channels = [c.point(lambda value: 255 if value > 210 else 0) for c in picture.split()]
+                        mask = ImageChops.multiply(ImageChops.multiply(channels[0], channels[1]), channels[2])
+                        bounds = mask.crop((0, 40 * scale, picture.width, picture.height)).getbbox()
+                        assert bounds, 'The window disappeared during a corner drag'
+                        record['painted_bounds'] = [bounds[0], bounds[1] + 40 * scale, bounds[2], bounds[3] + 40 * scale]
+                        record['anchor_error'] = max(abs(bounds[2] - (g['X'] + g['WIDTH'])), abs(bounds[3] + 40 * scale - (g['Y'] + g['HEIGHT'])))
+                    records.append(record)
             finally:
                 stop.set()
                 thread.join(timeout=4)
@@ -263,6 +277,8 @@ try:
     (output / 'result.json').write_text(json.dumps({'scale': scale, 'frames': records}, indent=2) + '\n')
     bad = [r for r in records if r['black_strip_pixels'] > 2 * scale]
     assert not bad, f'{len(bad)} frames expose black strips: {bad[:3]}'
+    bad = [r for r in records if r.get('anchor_error', 0) > 2 * scale]
+    assert not bad, f'{len(bad)} frames move the fixed opposite corner: {bad[:3]}'
     print('PASS: continuous horizontal and vertical drags retain both app pictures', flush=True)
 finally:
     input_event('NotifyPointerButton', '(ib)', (272, False))

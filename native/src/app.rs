@@ -63,6 +63,8 @@ enum Message {
     FocusTab(bool),
     Activate,
     MenuMove(i8),
+    CalendarMove(i32),
+    FramePresented,
     DeleteWord(bool),
 }
 
@@ -271,6 +273,9 @@ impl Notes {
                     | window::Event::Resized(_)
                     | window::Event::CloseRequested),
                 ) => Some(Message::Window(id, e)),
+                Event::Window(window::Event::RedrawRequested(_)) if crate::x11::pending() => {
+                    Some(Message::FramePresented)
+                }
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                     Some(Message::Board(pin::Message::Drop))
                 }
@@ -479,7 +484,11 @@ impl Notes {
                 let kind = pin::State::group(&action);
                 let board = self.board.as_mut().unwrap();
                 let revision = board.revision;
+                let opening = matches!(action, pin::Message::Options(_));
                 let task = board.update(action).map(Message::Board);
+                if opening {
+                    board.anchor_options(self.pointer);
+                }
                 if board.revision != revision {
                     self.content = text_editor::Content::with_text(&board.markdown());
                     self.record(before, kind);
@@ -670,6 +679,11 @@ impl Notes {
                     },
                 ]);
             }
+            Message::FramePresented => {
+                if let Some(id) = self.window {
+                    return window::run(id, |_| crate::x11::frame_presented()).discard();
+                }
+            }
             Message::Drag => {
                 if let Some(id) = self.window {
                     return window::drag(id);
@@ -732,6 +746,19 @@ impl Notes {
             Message::MenuMove(direction) => {
                 if self.context.is_some() {
                     self.move_menu(direction);
+                } else if self.board.as_ref().is_some_and(pin::State::calendar_open) {
+                    return self.update(Message::Board(pin::Message::CalendarMove(
+                        direction as i32 * 7,
+                    )));
+                } else if self.board.as_ref().is_some_and(pin::State::has_options) {
+                    return self.update(Message::Board(pin::Message::OptionsTab(direction < 0)));
+                }
+            }
+            Message::CalendarMove(step) => {
+                if self.context.is_none()
+                    && self.board.as_ref().is_some_and(pin::State::calendar_open)
+                {
+                    return self.update(Message::Board(pin::Message::CalendarMove(step)));
                 }
             }
             Message::Activate => {
@@ -1014,7 +1041,11 @@ impl Notes {
             body = body.push(container(text(message).size(12)).padding(12));
         }
         body = if let Some(board) = &self.board {
-            body.push(board.view().map(Message::Board))
+            body.push(
+                board
+                    .view(Size::new(self.bounds.width, self.bounds.height))
+                    .map(Message::Board),
+            )
         } else {
             body.push(mouse_area(editor).on_right_press(Message::Context(true)))
         };
@@ -1229,6 +1260,10 @@ fn navigation(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Mes
         keyboard::Key::Named(Named::F10) if modifiers.shift() => Some(Message::Context(true)),
         keyboard::Key::Named(Named::ArrowUp) => Some(Message::MenuMove(-1)),
         keyboard::Key::Named(Named::ArrowDown) => Some(Message::MenuMove(1)),
+        keyboard::Key::Named(Named::ArrowLeft) => Some(Message::CalendarMove(-1)),
+        keyboard::Key::Named(Named::ArrowRight) => Some(Message::CalendarMove(1)),
+        keyboard::Key::Named(Named::PageUp) => Some(Message::Board(pin::Message::Month(false))),
+        keyboard::Key::Named(Named::PageDown) => Some(Message::Board(pin::Message::Month(true))),
         _ => None,
     }
 }

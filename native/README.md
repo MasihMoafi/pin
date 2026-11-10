@@ -34,9 +34,11 @@ Ctrl+N adds a task, Ctrl+T adds a subtask, Ctrl+Enter completes it, Ctrl+D opens
 its options, and Ctrl+Shift+Backspace deletes it. Enter splits a task, Tab and
 Shift+Tab change its level, and Alt+↑ / Alt+↓ reorder it. Only the grip starts
 a mouse drag, and the drop line shows its destination. Ctrl+Tab moves from a
-task to the header controls. Options contain the color palette, custom hex
-color, date/time, daily repeat and delete. Draft dates and custom colors
-apply with their buttons or Enter; Escape closes the options.
+task to the header controls. The task menu opens over the list. Date opens a month calendar: use the
+month arrows or Page Up/Page Down, move between days with the arrow keys,
+and pick with Enter. Time opens hour and minute dropdowns; Color opens the
+palette and custom hex field. Escape goes back, then closes the menu.
+Custom colors apply with their button or Enter.
 Task rows grow with their text and wrap when the window becomes narrower.
 
 Sticky Notes saves to `Documents/Sticky Notes.txt`, using the desktop's

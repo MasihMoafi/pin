@@ -209,19 +209,31 @@ try:
     x('key', 'End', 'ctrl+d')
     time.sleep(.3)
     shot('pin-options')
-    # Date field is focused when the options open.
-    x('type', '--clearmodifiers', '2028-02-29')
-    x('key', 'Tab')
-    x('type', '--clearmodifiers', '09:30')
+    # The task list stays visible while a dropdown opens a month calendar.
     x('key', 'Return')
+    time.sleep(.2)
+    target = date(2028, 2, 29)
+    months = (target.year - date.today().year) * 12 + target.month - date.today().month
+    if months:
+        x('key', *(['Next' if months > 0 else 'Prior'] * abs(months)))
+    days = target.day - date.today().day
+    if days:
+        x('key', *(['Right' if days > 0 else 'Left'] * abs(days)))
+    shot('pin-calendar')
+    x('key', 'Return')
+    contains('📅 2028-02-29')
+    # Hour and minute are dropdowns too; Enter chooses the focused option.
+    x('key', 'Tab', 'Return', 'Return', 'Return')
+    contains('📅 2028-02-29 09:00')
+    x('key', 'Tab', 'Return', *(['Tab'] * 30), 'Return')
     contains('📅 2028-02-29 09:30')
-    x('key', 'Escape')
+    x('key', 'Escape', 'Escape')
     physical(52)
-    wait(lambda: '📅' not in file.read_text(), 'Undo date')
+    contains('📅 2028-02-29 09:00')
     physical(29)
     contains('📅 2028-02-29 09:30')
-    x('key', 'Escape')
-    check('Date/time editing validates and shares the app undo history')
+    x('key', 'Escape', 'Escape')
+    check('Calendar and time dropdowns work by keyboard and share undo/redo')
     # Open a fresh options panel, then reach daily repeat with Shift+Tab.
     click(115, 73)
     x('key', 'ctrl+d', 'shift+Tab', 'Return')
@@ -243,10 +255,7 @@ try:
     check('Daily tasks reopen after an overnight restart and preserve their time')
     p, wid, file, _ = start('colors')
     click(115, 73)
-    x('key', 'ctrl+d')
-    for _ in range(10):
-        x('key', 'Tab')
-    x('key', 'Return')
+    x('key', 'ctrl+d', 'Tab', 'Tab', 'Return', *(['Tab'] * 6), 'Return')
     contains('<mark style="background: #ec4899;">First priority</mark>')
     physical(52)
     saved(initial)
@@ -261,7 +270,7 @@ try:
     contains('<mark style="background: #123456;">First priority</mark>')
     physical(52)
     contains('#ec4899')
-    x('key', 'Escape')
+    x('key', 'Escape', 'Escape')
     close()
     check('Palette and custom colors work through the keyboard and share undo/redo')
     p, wid, file, _ = start('unicode', '- [ ] First priority\n- [ ] Second priority\n')

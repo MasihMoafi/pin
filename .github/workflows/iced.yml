@@ -1,7 +1,7 @@
 name: Native Iced apps
 on:
   push:
-    branches: [work/iced-notes, work/iced-pin, work/iced-pin-integrated]
+    branches: [work/iced-notes, work/iced-pin, work/iced-pin-integrated, work/recording-fixes-20261110]
     paths: ['native/**', '.github/workflows/iced.yml']
   workflow_dispatch:
 permissions:
