@@ -114,6 +114,10 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                 unsafe { (xlib.XInternAtom)(display, c"_NET_WM_SYNC_REQUEST_COUNTER".as_ptr(), 0) };
             let counter =
                 unsafe { (sync.XSyncCreateCounter)(display, sync::XSyncValue { hi: 0, lo: 0 }) };
+            // The second entry enables GNOME's extended synchronization, which
+            // keeps the old surface and its geometry together until repaint.
+            // Other window managers can keep using the legacy first entry.
+            let counters = [counter, counter];
             let mut protocols = std::ptr::null_mut();
             let mut count = 0;
             let mut list = vec![];
@@ -131,8 +135,8 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                     xlib::XA_CARDINAL,
                     32,
                     xlib::PropModeReplace,
-                    (&counter as *const c_ulong).cast(),
-                    1,
+                    counters.as_ptr().cast(),
+                    counters.len() as c_int,
                 );
                 list.push(request);
                 (xlib.XSetWMProtocols)(display, window, list.as_mut_ptr(), list.len() as c_int);
