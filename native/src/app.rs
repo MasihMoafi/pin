@@ -266,7 +266,8 @@ impl Notes {
                 },
             )
             .map(|_| Message::Tick),
-            event::listen_with(|event, status, id| match event {
+            // listen_with filters redraws; acknowledge only after the frame is presented.
+            event::listen_raw(|event, status, id| match event {
                 Event::Window(
                     e @ (window::Event::Opened { .. }
                     | window::Event::Moved(_)
