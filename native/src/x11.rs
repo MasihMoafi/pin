@@ -1,4 +1,6 @@
 //! Coordinate X11 resizing with the completed software-rendered frame.
+use iced::advanced::{layout, renderer, widget::Tree, Layout, Widget};
+use iced::{mouse, Element, Fill, Length, Rectangle, Renderer, Size, Theme};
 use std::cell::RefCell;
 use std::ffi::{c_int, c_ulong, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +18,7 @@ struct State {
     request: c_ulong,
     decode: Option<Decode>,
     pending: Option<sync::XSyncValue>,
+    drawn: Option<(Size, i32, u32)>,
 }
 thread_local! { static STATE: RefCell<Option<State>> = const { RefCell::new(None) }; }
 static PENDING: AtomicBool = AtomicBool::new(false);
@@ -58,22 +61,28 @@ pub fn pending() -> bool {
 
 /// Runs on the event-loop thread after Iced has presented the redraw that
 /// emitted RedrawRequested. X11 drawing and counter updates share a connection.
-pub fn frame_presented(width: u32, height: u32) {
+pub fn frame_presented(scale: f32) {
     // Xlib may decode a newer resize request while waiting for this reply.
     // Keep the connection query outside the STATE borrow.
     let query = STATE.with(|slot| {
         let state = slot.borrow();
         let state = state.as_ref()?;
         let value = state.pending.as_ref()?;
+        let (size, drawn_hi, drawn_lo) = state.drawn?;
+        if (value.hi, value.lo) != (drawn_hi, drawn_lo) {
+            return None;
+        }
         Some((
             state.display,
             state.window,
             state.xlib.XGetGeometry,
             value.hi,
             value.lo,
+            (size.width * scale).round() as u32,
+            (size.height * scale).round() as u32,
         ))
     });
-    let Some((display, window, geometry, hi, lo)) = query else {
+    let Some((display, window, geometry, hi, lo, width, height)) = query else {
         return;
     };
     let (mut root, mut x, mut y, mut current_width, mut current_height, mut border, mut depth) =
@@ -180,6 +189,7 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                 request,
                 decode: previous,
                 pending: None,
+                drawn: None,
             });
         }
         if let Some(state) = state.as_ref() {
@@ -198,4 +208,38 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
             }
         }
     });
+}
+
+/// Observe the layout actually drawn, rather than application state, which can
+/// already contain the next resize by the time a frame message is processed.
+pub fn frame<'a, Message: 'a>() -> Element<'a, Message> {
+    struct Frame;
+    impl<Message> Widget<Message, Theme, Renderer> for Frame {
+        fn size(&self) -> Size<Length> {
+            Size::new(Fill, Fill)
+        }
+        fn layout(&mut self, _: &mut Tree, _: &Renderer, limits: &layout::Limits) -> layout::Node {
+            layout::Node::new(limits.max())
+        }
+        fn draw(
+            &self,
+            _: &Tree,
+            _: &mut Renderer,
+            _: &Theme,
+            _: &renderer::Style,
+            layout: Layout<'_>,
+            _: mouse::Cursor,
+            _: &Rectangle,
+        ) {
+            STATE.with(|slot| {
+                if let Some(state) = slot.borrow_mut().as_mut() {
+                    state.drawn = state
+                        .pending
+                        .as_ref()
+                        .map(|value| (layout.bounds().size(), value.hi, value.lo));
+                }
+            });
+        }
+    }
+    Element::new(Frame)
 }

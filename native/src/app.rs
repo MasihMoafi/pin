@@ -64,7 +64,7 @@ enum Message {
     Activate,
     MenuMove(i8),
     CalendarMove(i32),
-    FramePresented(Size),
+    FramePresented,
     DeleteWord(bool),
 }
 
@@ -267,13 +267,7 @@ impl Notes {
             )
             .map(|_| Message::Tick),
             window::frames()
-                .with((self.bounds.width.to_bits(), self.bounds.height.to_bits()))
-                .filter_map(|((width, height), _)| {
-                    crate::x11::pending().then_some(Message::FramePresented(Size::new(
-                        f32::from_bits(width),
-                        f32::from_bits(height),
-                    )))
-                }),
+                .filter_map(|_| crate::x11::pending().then_some(Message::FramePresented)),
             event::listen_with(|event, status, id| match event {
                 Event::Window(
                     e @ (window::Event::Opened { .. }
@@ -684,16 +678,10 @@ impl Notes {
                     },
                 ]);
             }
-            Message::FramePresented(rendered) => {
+            Message::FramePresented => {
                 if let Some(id) = self.window {
                     return window::scale_factor(id).then(move |scale| {
-                        window::run(id, move |_| {
-                            crate::x11::frame_presented(
-                                (rendered.width * scale).round() as u32,
-                                (rendered.height * scale).round() as u32,
-                            )
-                        })
-                        .discard()
+                        window::run(id, move |_| crate::x11::frame_presented(scale)).discard()
                     });
                 }
             }
@@ -1075,7 +1063,7 @@ impl Notes {
                 },
                 ..Default::default()
             });
-        let mut layers = stack![base];
+        let mut layers = stack![crate::x11::frame(), base];
         if let Some(p) = self.context {
             let menu = column((0..6).map(|i| {
                 menu_item(
