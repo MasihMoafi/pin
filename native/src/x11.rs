@@ -15,11 +15,7 @@ struct State {
     protocol: c_ulong,
     request: c_ulong,
     decode: Option<Decode>,
-    pending: Option<Resize>,
-}
-struct Resize {
-    value: sync::XSyncValue,
-    needs_redraw: bool,
+    pending: Option<sync::XSyncValue>,
 }
 thread_local! { static STATE: RefCell<Option<State>> = const { RefCell::new(None) }; }
 static PENDING: AtomicBool = AtomicBool::new(false);
@@ -45,14 +41,11 @@ unsafe extern "C" fn decode(
                 && message.message_type == state.protocol
                 && message.data.get_long(0) as c_ulong == state.request
             {
-                state.pending = Some(Resize {
-                    value: sync::XSyncValue {
-                        hi: message.data.get_long(3) as i32,
-                        lo: message.data.get_long(2) as u32,
-                    },
-                    needs_redraw: true,
+                state.pending = Some(sync::XSyncValue {
+                    hi: message.data.get_long(3) as i32,
+                    lo: message.data.get_long(2) as u32,
                 });
-                PENDING.store(true, Ordering::Relaxed);
+                PENDING.store(true, Ordering::Release);
             }
         }
         result
@@ -60,32 +53,70 @@ unsafe extern "C" fn decode(
 }
 
 pub fn pending() -> bool {
-    PENDING.load(Ordering::Relaxed)
+    PENDING.load(Ordering::Acquire)
 }
 
 /// Runs on the event-loop thread after Iced has presented the redraw that
 /// emitted RedrawRequested. X11 drawing and counter updates share a connection.
-pub fn frame_presented() {
-    STATE.with(|slot| {
-        let mut state = slot.borrow_mut();
-        if let Some(state) = state.as_mut() {
-            if let Some(resize) = &mut state.pending {
-                // Xlib can decode a request while the previous frame is being
-                // presented. Complete a fresh redraw before acknowledging it.
-                if resize.needs_redraw {
-                    resize.needs_redraw = false;
-                    return;
-                }
-            }
-            if let Some(resize) = state.pending.take() {
-                unsafe {
-                    (state.sync.XSyncSetCounter)(state.display, state.counter, resize.value);
-                    (state.xlib.XFlush)(state.display);
-                }
-            }
-        }
-        PENDING.store(false, Ordering::Relaxed);
+pub fn frame_presented(width: u32, height: u32) {
+    // Xlib may decode a newer resize request while waiting for this reply.
+    // Keep the connection query outside the STATE borrow.
+    let query = STATE.with(|slot| {
+        let state = slot.borrow();
+        let state = state.as_ref()?;
+        let value = state.pending.as_ref()?;
+        Some((
+            state.display,
+            state.window,
+            state.xlib.XGetGeometry,
+            value.hi,
+            value.lo,
+        ))
     });
+    let Some((display, window, geometry, hi, lo)) = query else {
+        return;
+    };
+    let (mut root, mut x, mut y, mut current_width, mut current_height, mut border, mut depth) =
+        (0, 0, 0, 0, 0, 0, 0);
+    let exists = unsafe {
+        geometry(
+            display,
+            window,
+            &mut root,
+            &mut x,
+            &mut y,
+            &mut current_width,
+            &mut current_height,
+            &mut border,
+            &mut depth,
+        )
+    };
+    if exists == 0 || (width, height) != (current_width, current_height) {
+        return;
+    }
+    let ack = STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        let state = state.as_mut()?;
+        let value = state.pending.as_ref()?;
+        if (value.hi, value.lo) != (hi, lo) {
+            return None;
+        }
+        let value = state.pending.take()?;
+        PENDING.store(false, Ordering::Release);
+        Some((
+            state.display,
+            state.counter,
+            value,
+            state.sync.XSyncSetCounter,
+            state.xlib.XFlush,
+        ))
+    });
+    if let Some((display, counter, value, acknowledge, flush)) = ack {
+        unsafe {
+            acknowledge(display, counter, value);
+            flush(display);
+        }
+    }
 }
 
 /// Preserve pixels and negotiate the standard X11 resize synchronization.
@@ -114,10 +145,6 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                 unsafe { (xlib.XInternAtom)(display, c"_NET_WM_SYNC_REQUEST_COUNTER".as_ptr(), 0) };
             let counter =
                 unsafe { (sync.XSyncCreateCounter)(display, sync::XSyncValue { hi: 0, lo: 0 }) };
-            // The second entry enables GNOME's extended synchronization, which
-            // keeps the old surface and its geometry together until repaint.
-            // Other window managers can keep using the legacy first entry.
-            let counters = [counter, counter];
             let mut protocols = std::ptr::null_mut();
             let mut count = 0;
             let mut list = vec![];
@@ -135,8 +162,8 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                     xlib::XA_CARDINAL,
                     32,
                     xlib::PropModeReplace,
-                    counters.as_ptr().cast(),
-                    counters.len() as c_int,
+                    (&counter as *const c_ulong).cast(),
+                    1,
                 );
                 list.push(request);
                 (xlib.XSetWMProtocols)(display, window, list.as_mut_ptr(), list.len() as c_int);

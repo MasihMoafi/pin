@@ -4,19 +4,12 @@ on:
     branches: [work/iced-notes, work/iced-pin, work/iced-pin-integrated, work/recording-fixes-20261110]
     paths: ['native/**', '.github/workflows/iced.yml']
   workflow_dispatch:
-    inputs:
-      gpu:
-        description: Build the GPU renderer for real-desktop resize verification
-        type: boolean
-        default: false
 permissions:
   contents: read
   actions: read
 jobs:
   linux:
     runs-on: ubuntu-24.04
-    env:
-      NATIVE_FEATURES: ${{ inputs.gpu && 'gpu-ui' || 'iced-ui' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -28,9 +21,9 @@ jobs:
           workspaces: native
           key: iced-software
           cache-on-failure: true
-      - run: cargo test --locked --manifest-path native/Cargo.toml --no-default-features --features "$NATIVE_FEATURES"
-      - run: cargo clippy --locked --manifest-path native/Cargo.toml --no-default-features --features "$NATIVE_FEATURES" --all-targets -- -D warnings
-      - run: cargo build --locked --manifest-path native/Cargo.toml --no-default-features --features "$NATIVE_FEATURES" --bins --release
+      - run: cargo test --locked --manifest-path native/Cargo.toml --no-default-features --features iced-ui
+      - run: cargo clippy --locked --manifest-path native/Cargo.toml --no-default-features --features iced-ui --all-targets -- -D warnings
+      - run: cargo build --locked --manifest-path native/Cargo.toml --no-default-features --features iced-ui --bins --release
       - uses: actions/upload-artifact@v4
         with:
           name: notes-iced-linux
@@ -58,8 +51,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run download 42611779863 -n pin-native-linux -D baseline
       - name: Verify and compare real native apps on a hidden display
-        env:
-          ICED_BACKEND: tiny-skia
         run: |
           Xvfb :99 -screen 0 1600x1000x24 -nolisten tcp &
           iced_display_pid=$!

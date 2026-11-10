@@ -64,7 +64,7 @@ enum Message {
     Activate,
     MenuMove(i8),
     CalendarMove(i32),
-    FramePresented,
+    FramePresented(Size),
     DeleteWord(bool),
 }
 
@@ -266,17 +266,21 @@ impl Notes {
                 },
             )
             .map(|_| Message::Tick),
-            // listen_with filters redraws; acknowledge only after the frame is presented.
-            event::listen_raw(|event, status, id| match event {
+            window::frames()
+                .with((self.bounds.width.to_bits(), self.bounds.height.to_bits()))
+                .filter_map(|((width, height), _)| {
+                    crate::x11::pending().then_some(Message::FramePresented(Size::new(
+                        f32::from_bits(width),
+                        f32::from_bits(height),
+                    )))
+                }),
+            event::listen_with(|event, status, id| match event {
                 Event::Window(
                     e @ (window::Event::Opened { .. }
                     | window::Event::Moved(_)
                     | window::Event::Resized(_)
                     | window::Event::CloseRequested),
                 ) => Some(Message::Window(id, e)),
-                Event::Window(window::Event::RedrawRequested(_)) if crate::x11::pending() => {
-                    Some(Message::FramePresented)
-                }
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                     Some(Message::Board(pin::Message::Drop))
                 }
@@ -680,9 +684,17 @@ impl Notes {
                     },
                 ]);
             }
-            Message::FramePresented => {
+            Message::FramePresented(rendered) => {
                 if let Some(id) = self.window {
-                    return window::run(id, |_| crate::x11::frame_presented()).discard();
+                    return window::scale_factor(id).then(move |scale| {
+                        window::run(id, move |_| {
+                            crate::x11::frame_presented(
+                                (rendered.width * scale).round() as u32,
+                                (rendered.height * scale).round() as u32,
+                            )
+                        })
+                        .discard()
+                    });
                 }
             }
             Message::Drag => {

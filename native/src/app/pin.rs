@@ -558,6 +558,7 @@ impl State {
                     }
                     .unwrap_or(o.calendar);
                     o.focus = 32 + o.calendar.day() as u8 - 1;
+                    return self.focus_and_reveal();
                 }
             }
             Message::CalendarMove(delta) => {
@@ -570,6 +571,7 @@ impl State {
                         }
                         .unwrap_or(o.calendar);
                         o.focus = 32 + o.calendar.day() as u8 - 1;
+                        return self.focus_and_reveal();
                     }
                 }
             }
