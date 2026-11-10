@@ -32,10 +32,14 @@ scale = float(os.environ.get('RESIZE_TEST_SCALE', '1'))
 desktop_scale = float(os.environ.get('DESKTOP_TEST_SCALE', '1'))
 xwayland_scale = float(os.environ.get('XWAYLAND_TEST_SCALE', '1'))
 pixel_ratio = desktop_scale / xwayland_scale
+wrapped_case = os.environ.get('RESIZE_TEST_CASE') == 'wrapped'
 assert os.environ['DISPLAY'] != ':0', 'Use an isolated desktop'
 env = dict(os.environ, GDK_BACKEND='x11', WEBKIT_DISABLE_COMPOSITING_MODE='1', GSETTINGS_BACKEND='keyfile', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), XDG_CONFIG_HOME=str(root / 'config'), STICKY_NOTES_FILE=str(root / 'Notes.txt'), PRIORITIES_FILE=str(root / 'Pin.md'))
 (root / 'Notes.txt').write_text('Responsibilities\n\nEach agent is responsible for something.\n')
 (root / 'Pin.md').write_text('- [ ] ==🟢Green priority==\n- [ ] ==🟡Yellow priority==\n- [ ] <mark style="background: #ec4899;">Pink priority</mark>\n- [ ] ==🔵Blue priority==\n- [ ] Plain priority\n')
+if wrapped_case:
+    (root / 'Notes.txt').write_text('\n'.join(f'{i}: Keep the selected text and the saved note intact while resizing. ' * 3 for i in range(80)))
+    (root / 'Pin.md').write_text(''.join(f'- [ ] ==🟢Priority {i}: Read the research paper and explain its assumptions, mechanisms and tradeoffs carefully.==\n' for i in range(30)))
 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 # The isolated shell grants screenshots to the media-keys service.
 name = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'RequestName', GLib.Variant('(su)', ('org.gnome.SettingsDaemon.MediaKeys', 0)), None, 0, 3000, None).unpack()[0]
@@ -68,6 +72,17 @@ position = [0., 0.]
 def move(px, py):
     input_event('NotifyPointerMotionRelative', '(dd)', ((px - position[0]) / xwayland_scale, (py - position[1]) / xwayland_scale))
     position[:] = [px, py]
+
+
+def control_key(code):
+    for key, down in [(29, True), (code, True), (code, False), (29, False)]:
+        input_event('NotifyKeyboardKeycode', '(ub)', (key, down))
+    time.sleep(.15)
+
+
+def selection():
+    control_key(46)  # C
+    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-out'], env=env, timeout=5)
 
 
 def screenshot(name, window=False):
@@ -197,6 +212,7 @@ def black_strip(path, before, after):
 
 
 records = []
+resources = []
 children = []
 input_event('Start')
 input_event('NotifyPointerMotionRelative', '(dd)', (-10000., -10000.))
@@ -223,10 +239,20 @@ try:
         time.sleep(.5)
         if kind == 'pin':
             if Path(pin).name == 'pin-iced':
-                if scale.is_integer() and desktop_scale == 1:
+                if scale.is_integer() and desktop_scale == 1 and not wrapped_case:
                     native_checkboxes(wid, int(scale))
             else:
                 checkboxes(process.pid)
+        if wrapped_case:
+            g = geometry(wid)
+            move(g['X'] + 130 * scale, g['Y'] + 73 * scale)
+            input_event('NotifyPointerButton', '(ib)', (272, True))
+            input_event('NotifyPointerButton', '(ib)', (272, False))
+            control_key(30)  # A
+            selected = selection()
+            assert selected, 'Select the real editor text before resizing'
+            data_file = root / ('Pin.md' if kind == 'pin' else 'Notes.txt')
+            saved_before = data_file.read_bytes()
         for axis in ['width', 'height', 'top-left']:
             g = geometry(wid)
             if axis == 'top-left':
@@ -279,9 +305,27 @@ try:
             assert not failures, failures
             print('CAPTURED', kind, axis, flush=True)
             time.sleep(.3)
+        if wrapped_case:
+            assert selection() == selected, 'Resizing changed the text selection'
+            input_event('NotifyKeyboardKeysym', '(ub)', (ord('x'), True))
+            input_event('NotifyKeyboardKeysym', '(ub)', (ord('x'), False))
+            for _ in range(80):
+                if data_file.read_bytes() != saved_before:
+                    break
+                time.sleep(.05)
+            assert data_file.read_bytes() != saved_before, 'Typing after resizing must replace the selection and save'
+            control_key(44)  # Z
+            for _ in range(80):
+                if data_file.read_bytes() == saved_before:
+                    break
+                time.sleep(.05)
+            assert data_file.read_bytes() == saved_before, 'Undo must restore the exact saved text after resizing'
+            print('PASS:', kind, 'wrapped content, selection, typing, save and undo survive resizing', flush=True)
+        pss = next(line.split()[1] for line in Path(f'/proc/{process.pid}/smaps_rollup').read_text().splitlines() if line.startswith('Pss:'))
+        resources.append({'app': kind, 'pss_kib': int(pss)})
         os.killpg(process.pid, signal.SIGTERM)
         process.wait(timeout=5)
-    (output / 'result.json').write_text(json.dumps({'scale': scale, 'desktop_scale': desktop_scale, 'frames': records}, indent=2) + '\n')
+    (output / 'result.json').write_text(json.dumps({'scale': scale, 'desktop_scale': desktop_scale, 'wrapped_content': wrapped_case, 'resources': resources, 'frames': records}, indent=2) + '\n')
     bad = [r for r in records if r['black_strip_pixels'] > 2 * scale]
     assert not bad, f'{len(bad)} frames expose black strips: {bad[:3]}'
     bad = [r for r in records if r.get('anchor_error', 0) > 2 * scale * desktop_scale]
