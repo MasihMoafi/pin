@@ -281,11 +281,8 @@ impl State {
     }
     pub fn set_active(&mut self, target: Target) {
         self.active = target;
-        if let Some(o) = &mut self.options {
-            match target {
-                Target::Color => o.focus = 18,
-                _ => (),
-            }
+        if let (Target::Color, Some(o)) = (target, &mut self.options) {
+            o.focus = 18;
         }
     }
     fn item_id(&self) -> u64 {

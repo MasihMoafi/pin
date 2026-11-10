@@ -29,6 +29,7 @@ output = Path(sys.argv[3]).resolve()
 output.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='resize-', dir=output))
 scale = float(os.environ.get('RESIZE_TEST_SCALE', '1'))
+desktop_scale = float(os.environ.get('DESKTOP_TEST_SCALE', '1'))
 assert os.environ['DISPLAY'] != ':0', 'Use an isolated desktop'
 env = dict(os.environ, GDK_BACKEND='x11', WEBKIT_DISABLE_COMPOSITING_MODE='1', GSETTINGS_BACKEND='keyfile', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), XDG_CONFIG_HOME=str(root / 'config'), STICKY_NOTES_FILE=str(root / 'Notes.txt'), PRIORITIES_FILE=str(root / 'Pin.md'))
 (root / 'Notes.txt').write_text('Responsibilities\n\nEach agent is responsible for something.\n')
@@ -172,6 +173,8 @@ def native_checkboxes(wid, scale):
 
 
 def black_strip(path, before, after):
+    before = {k: round(v * desktop_scale) for k, v in before.items()}
+    after = {k: round(v * desktop_scale) for k, v in after.items()}
     # Check the composited desktop: raw window captures can expose transparent
     # pixels that appear black when converted to RGB. The isolated grey desktop
     # distinguishes visible black artifacts from space exposed during a drag.
@@ -182,7 +185,7 @@ def black_strip(path, before, after):
     pixels = image.load()
     min_width = width - 6
     min_height = height - 6
-    body = image.crop((0, round(50 * scale), min_width, min_height))
+    body = image.crop((0, round(50 * scale * desktop_scale), min_width, min_height))
     dark = os.environ.get('ICED_THEME') == 'Dark'
     visible = sum((min(pixel) >= 15 and max(pixel) < 80) if dark else min(pixel) > 210 for pixel in body.getdata())
     assert visible > body.width * body.height / 2, 'The painted app must remain visible'
@@ -218,7 +221,7 @@ try:
         time.sleep(.5)
         if kind == 'pin':
             if Path(pin).name == 'pin-iced':
-                if scale.is_integer():
+                if scale.is_integer() and desktop_scale == 1:
                     native_checkboxes(wid, int(scale))
             else:
                 checkboxes(process.pid)
@@ -262,10 +265,10 @@ try:
                         dark = os.environ.get('ICED_THEME') == 'Dark'
                         channels = [c.point(lambda value: 255 if (15 <= value < 80 if dark else value > 210) else 0) for c in picture.split()]
                         mask = ImageChops.multiply(ImageChops.multiply(channels[0], channels[1]), channels[2])
-                        bounds = mask.crop((0, round(40 * scale), picture.width, picture.height)).getbbox()
+                        bounds = mask.crop((0, round(40 * scale * desktop_scale), picture.width, picture.height)).getbbox()
                         assert bounds, 'The window disappeared during a corner drag'
-                        record['painted_bounds'] = [bounds[0], bounds[1] + 40 * scale, bounds[2], bounds[3] + 40 * scale]
-                        record['anchor_error'] = max(abs(bounds[2] - (g['X'] + g['WIDTH'])), abs(bounds[3] + 40 * scale - (g['Y'] + g['HEIGHT'])))
+                        record['painted_bounds'] = [bounds[0], bounds[1] + round(40 * scale * desktop_scale), bounds[2], bounds[3] + round(40 * scale * desktop_scale)]
+                        record['anchor_error'] = max(abs(bounds[2] - round((g['X'] + g['WIDTH']) * desktop_scale)), abs(bounds[3] + round(40 * scale * desktop_scale) - round((g['Y'] + g['HEIGHT']) * desktop_scale)))
                     records.append(record)
             finally:
                 stop.set()
@@ -276,10 +279,10 @@ try:
             time.sleep(.3)
         os.killpg(process.pid, signal.SIGTERM)
         process.wait(timeout=5)
-    (output / 'result.json').write_text(json.dumps({'scale': scale, 'frames': records}, indent=2) + '\n')
+    (output / 'result.json').write_text(json.dumps({'scale': scale, 'desktop_scale': desktop_scale, 'frames': records}, indent=2) + '\n')
     bad = [r for r in records if r['black_strip_pixels'] > 2 * scale]
     assert not bad, f'{len(bad)} frames expose black strips: {bad[:3]}'
-    bad = [r for r in records if r.get('anchor_error', 0) > 2 * scale]
+    bad = [r for r in records if r.get('anchor_error', 0) > 2 * scale * desktop_scale]
     assert not bad, f'{len(bad)} frames move the fixed opposite corner: {bad[:3]}'
     print('PASS: continuous edge and corner drags retain both app pictures and the fixed opposite corner', flush=True)
 finally:
