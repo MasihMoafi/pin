@@ -10,6 +10,7 @@ default = ["desktop", "custom-protocol"]
 desktop = ["dep:gtk", "dep:tauri", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-clipboard-manager"]
 custom-protocol = ["tauri/custom-protocol"]
 iced-ui = ["dep:iced", "dep:image", "dep:unicode-segmentation", "dep:x11-dl"]
+gpu-ui = ["iced-ui", "iced/wgpu"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
