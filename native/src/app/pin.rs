@@ -70,6 +70,8 @@ pub enum Message {
     Color(Option<String>),
     ApplyDate,
     ClearDate,
+    ClearTime,
+    DismissOptions,
     ApplyColor,
     OptionsTab(bool),
     Activate,
@@ -512,6 +514,12 @@ impl State {
                     return self.focus_and_reveal();
                 }
             }
+            Message::DismissOptions => {
+                let id = self.options_item();
+                self.options = None;
+                self.active = Target::Item(id);
+                return self.focus_and_reveal();
+            }
             Message::CloseOptions => {
                 if self
                     .options
@@ -652,6 +660,12 @@ impl State {
                         self.options_error("Use YYYY-MM-DD and optional HH:MM.");
                     }
                 }
+            }
+            Message::ClearTime => {
+                if let Some(o) = &mut self.options {
+                    o.time = text_editor::Content::new();
+                }
+                return self.update(Message::ApplyDate);
             }
             Message::ClearDate => {
                 if let Some(i) = self.board.index(self.options_item()) {
@@ -816,6 +830,7 @@ impl State {
             24 => Message::Month(true),
             25 => Message::Panel(Panel::Hours),
             26 => Message::Panel(Panel::Minutes),
+            27 => Message::ClearTime,
             64..=123 if matches!(o.panel, Panel::Hours | Panel::Minutes) => {
                 Message::TimePart(o.panel == Panel::Hours, format!("{:02}", focus - 64))
             }
@@ -838,7 +853,7 @@ impl State {
                 order.push(4);
                 order
             }
-            Panel::Time => vec![22, 25, 26],
+            Panel::Time => vec![22, 25, 26, 27],
             Panel::Hours => (64..88).chain([22]).collect(),
             Panel::Minutes => (64..124).chain([22]).collect(),
             Panel::Color => (5..=19).chain([22]).collect(),
@@ -1004,9 +1019,9 @@ impl State {
         };
         let width = 270_f32.min(size.width - 20.);
         let height = match o.panel {
-            Panel::Main => 260.,
+            Panel::Main => 260_f32,
             Panel::Date => 350.,
-            Panel::Time => 130.,
+            Panel::Time => 170.,
             Panel::Color => 235.,
             Panel::Hours | Panel::Minutes => 260.,
         }
@@ -1028,7 +1043,8 @@ impl State {
             });
         stack![
             list,
-            mouse_area(container(space()).width(Fill).height(Fill)).on_press(Message::CloseOptions),
+            mouse_area(container(space()).width(Fill).height(Fill))
+                .on_press(Message::DismissOptions),
             container(menu).padding(Padding {
                 left,
                 top,
@@ -1372,6 +1388,7 @@ impl State {
                     .spacing(8)
                     .align_y(iced::Center),
                 );
+                body = body.push(self.option_button("Clear time", 27));
             }
             Panel::Hours | Panel::Minutes => {
                 body = body.push(self.option_button("Back", 22));

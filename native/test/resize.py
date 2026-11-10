@@ -28,7 +28,7 @@ pin, notes = (str(Path(p).resolve()) for p in sys.argv[1:3])
 output = Path(sys.argv[3]).resolve()
 output.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='resize-', dir=output))
-scale = int(os.environ.get('RESIZE_TEST_SCALE', '1'))
+scale = float(os.environ.get('RESIZE_TEST_SCALE', '1'))
 assert os.environ['DISPLAY'] != ':0', 'Use an isolated desktop'
 env = dict(os.environ, GDK_BACKEND='x11', WEBKIT_DISABLE_COMPOSITING_MODE='1', GSETTINGS_BACKEND='keyfile', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), XDG_CONFIG_HOME=str(root / 'config'), STICKY_NOTES_FILE=str(root / 'Notes.txt'), PRIORITIES_FILE=str(root / 'Pin.md'))
 (root / 'Notes.txt').write_text('Responsibilities\n\nEach agent is responsible for something.\n')
@@ -52,7 +52,7 @@ def input_event(method, signature=None, args=None):
 
 
 def x(*args):
-    return subprocess.check_output(['xdotool', *map(str, args)], env=env, text=True, stderr=subprocess.DEVNULL).strip()
+    return subprocess.check_output(['xdotool', *(str(round(arg)) if isinstance(arg, float) else str(arg) for arg in args)], env=env, text=True, stderr=subprocess.DEVNULL).strip()
 
 
 def geometry(wid):
@@ -182,7 +182,7 @@ def black_strip(path, before, after):
     pixels = image.load()
     min_width = width - 6
     min_height = height - 6
-    body = image.crop((0, 50 * scale, min_width, min_height))
+    body = image.crop((0, round(50 * scale), min_width, min_height))
     dark = os.environ.get('ICED_THEME') == 'Dark'
     visible = sum((min(pixel) >= 15 and max(pixel) < 80) if dark else min(pixel) > 210 for pixel in body.getdata())
     assert visible > body.width * body.height / 2, 'The painted app must remain visible'
@@ -260,7 +260,7 @@ try:
                         picture = Image.open(path).convert('RGB')
                         channels = [c.point(lambda value: 255 if value > 210 else 0) for c in picture.split()]
                         mask = ImageChops.multiply(ImageChops.multiply(channels[0], channels[1]), channels[2])
-                        bounds = mask.crop((0, 40 * scale, picture.width, picture.height)).getbbox()
+                        bounds = mask.crop((0, round(40 * scale), picture.width, picture.height)).getbbox()
                         assert bounds, 'The window disappeared during a corner drag'
                         record['painted_bounds'] = [bounds[0], bounds[1] + 40 * scale, bounds[2], bounds[3] + 40 * scale]
                         record['anchor_error'] = max(abs(bounds[2] - (g['X'] + g['WIDTH'])), abs(bounds[3] + 40 * scale - (g['Y'] + g['HEIGHT'])))
