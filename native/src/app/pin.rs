@@ -26,24 +26,18 @@ const CONTROL_HEIGHT: f32 = LINE_HEIGHT + 2. * EDITOR_PADDING;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     Item(u64),
-    Date,
-    Time,
     Color,
 }
 impl Target {
     fn id(self) -> String {
         match self {
             Self::Item(id) => format!("task-{id}"),
-            Self::Date => "pin-date".into(),
-            Self::Time => "pin-time".into(),
             Self::Color => "pin-color".into(),
         }
     }
     fn key(self) -> u64 {
         match self {
             Self::Item(id) => id,
-            Self::Date => u64::MAX,
-            Self::Time => u64::MAX - 1,
             Self::Color => u64::MAX - 2,
         }
     }
@@ -289,8 +283,6 @@ impl State {
         self.active = target;
         if let Some(o) = &mut self.options {
             match target {
-                Target::Date => o.focus = 1,
-                Target::Time => o.focus = 2,
                 Target::Color => o.focus = 18,
                 _ => (),
             }
@@ -308,16 +300,12 @@ impl State {
     fn editor(&self, target: Target) -> Option<&text_editor::Content> {
         match target {
             Target::Item(id) => self.editors.get(&id),
-            Target::Date => self.options.as_ref().map(|o| &o.date),
-            Target::Time => self.options.as_ref().map(|o| &o.time),
             Target::Color => self.options.as_ref().map(|o| &o.color),
         }
     }
     fn editor_mut(&mut self, target: Target) -> Option<&mut text_editor::Content> {
         match target {
             Target::Item(id) => self.editors.get_mut(&id),
-            Target::Date => self.options.as_mut().map(|o| &mut o.date),
-            Target::Time => self.options.as_mut().map(|o| &mut o.time),
             Target::Color => self.options.as_mut().map(|o| &mut o.color),
         }
     }
@@ -1288,7 +1276,7 @@ impl State {
                     ))
                     .push(
                         self.option_button(
-                            &item
+                            item
                                 .date
                                 .as_ref()
                                 .map_or_else(|| "Date…".into(), |d| display_date(d)),

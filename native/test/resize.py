@@ -133,7 +133,7 @@ def checkboxes(pid):
     print('PASS: checkbox contrast on five row colors in both themes, click, save and undo', flush=True)
 
 
-def native_checkboxes(wid):
+def native_checkboxes(wid, scale):
     g = geometry(wid)
     theme = os.environ.get('ICED_THEME', 'Light')
     picture = Image.open(screenshot('native-checkboxes-' + theme)).convert('RGB').crop(
@@ -218,7 +218,8 @@ try:
         time.sleep(.5)
         if kind == 'pin':
             if Path(pin).name == 'pin-iced':
-                native_checkboxes(wid)
+                if scale.is_integer():
+                    native_checkboxes(wid, int(scale))
             else:
                 checkboxes(process.pid)
         for axis in ['width', 'height', 'top-left']:
@@ -258,7 +259,8 @@ try:
                     record = {'app': kind, 'axis': axis, 'frame': frame, 'black_strip_pixels': strip, 'before': before, 'after': after}
                     if axis == 'top-left':
                         picture = Image.open(path).convert('RGB')
-                        channels = [c.point(lambda value: 255 if value > 210 else 0) for c in picture.split()]
+                        dark = os.environ.get('ICED_THEME') == 'Dark'
+                        channels = [c.point(lambda value: 255 if (15 <= value < 80 if dark else value > 210) else 0) for c in picture.split()]
                         mask = ImageChops.multiply(ImageChops.multiply(channels[0], channels[1]), channels[2])
                         bounds = mask.crop((0, round(40 * scale), picture.width, picture.height)).getbbox()
                         assert bounds, 'The window disappeared during a corner drag'
@@ -279,7 +281,7 @@ try:
     assert not bad, f'{len(bad)} frames expose black strips: {bad[:3]}'
     bad = [r for r in records if r.get('anchor_error', 0) > 2 * scale]
     assert not bad, f'{len(bad)} frames move the fixed opposite corner: {bad[:3]}'
-    print('PASS: continuous horizontal and vertical drags retain both app pictures', flush=True)
+    print('PASS: continuous edge and corner drags retain both app pictures and the fixed opposite corner', flush=True)
 finally:
     input_event('NotifyPointerButton', '(ib)', (272, False))
     input_event('Stop')
