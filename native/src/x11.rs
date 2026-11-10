@@ -15,7 +15,11 @@ struct State {
     protocol: c_ulong,
     request: c_ulong,
     decode: Option<Decode>,
-    pending: Option<sync::XSyncValue>,
+    pending: Option<Resize>,
+}
+struct Resize {
+    value: sync::XSyncValue,
+    needs_redraw: bool,
 }
 thread_local! { static STATE: RefCell<Option<State>> = const { RefCell::new(None) }; }
 static PENDING: AtomicBool = AtomicBool::new(false);
@@ -41,9 +45,12 @@ unsafe extern "C" fn decode(
                 && message.message_type == state.protocol
                 && message.data.get_long(0) as c_ulong == state.request
             {
-                state.pending = Some(sync::XSyncValue {
-                    hi: message.data.get_long(3) as i32,
-                    lo: message.data.get_long(2) as u32,
+                state.pending = Some(Resize {
+                    value: sync::XSyncValue {
+                        hi: message.data.get_long(3) as i32,
+                        lo: message.data.get_long(2) as u32,
+                    },
+                    needs_redraw: true,
                 });
                 PENDING.store(true, Ordering::Relaxed);
             }
@@ -62,9 +69,17 @@ pub fn frame_presented() {
     STATE.with(|slot| {
         let mut state = slot.borrow_mut();
         if let Some(state) = state.as_mut() {
-            if let Some(value) = state.pending.take() {
+            if let Some(resize) = &mut state.pending {
+                // Xlib can decode a request while the previous frame is being
+                // presented. Complete a fresh redraw before acknowledging it.
+                if resize.needs_redraw {
+                    resize.needs_redraw = false;
+                    return;
+                }
+            }
+            if let Some(resize) = state.pending.take() {
                 unsafe {
-                    (state.sync.XSyncSetCounter)(state.display, state.counter, value);
+                    (state.sync.XSyncSetCounter)(state.display, state.counter, resize.value);
                     (state.xlib.XFlush)(state.display);
                 }
             }
