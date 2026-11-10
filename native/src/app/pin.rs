@@ -1276,8 +1276,7 @@ impl State {
                     ))
                     .push(
                         self.option_button(
-                            item
-                                .date
+                            item.date
                                 .as_ref()
                                 .map_or_else(|| "Date…".into(), |d| display_date(d)),
                             1,
