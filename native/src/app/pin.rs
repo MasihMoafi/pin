@@ -6,8 +6,8 @@ use iced::keyboard::{
     key::{Code, Named, Physical},
 };
 use iced::widget::{
-    button, checkbox, column, container, keyed_column, mouse_area, operation, row, scrollable,
-    space, stack, svg, text, text_editor,
+    button, checkbox, column, container, keyed_column, mouse_area, opaque, operation, row,
+    scrollable, space, stack, svg, text, text_editor,
 };
 use iced::{Border, Color, Element, Fill, Length, Padding, Point, Size, Task, Theme};
 use std::{
@@ -1030,7 +1030,7 @@ impl State {
             list,
             mouse_area(container(space()).width(Fill).height(Fill))
                 .on_press(Message::DismissOptions),
-            container(menu).padding(Padding {
+            container(opaque(menu)).padding(Padding {
                 left,
                 top,
                 right: 0.,

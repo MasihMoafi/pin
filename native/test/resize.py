@@ -30,6 +30,8 @@ output.mkdir(parents=True, exist_ok=True)
 root = Path(tempfile.mkdtemp(prefix='resize-', dir=output))
 scale = float(os.environ.get('RESIZE_TEST_SCALE', '1'))
 desktop_scale = float(os.environ.get('DESKTOP_TEST_SCALE', '1'))
+xwayland_scale = float(os.environ.get('XWAYLAND_TEST_SCALE', '1'))
+pixel_ratio = desktop_scale / xwayland_scale
 assert os.environ['DISPLAY'] != ':0', 'Use an isolated desktop'
 env = dict(os.environ, GDK_BACKEND='x11', WEBKIT_DISABLE_COMPOSITING_MODE='1', GSETTINGS_BACKEND='keyfile', GDK_SCALE=str(scale), WINIT_X11_SCALE_FACTOR=str(scale), XDG_CONFIG_HOME=str(root / 'config'), STICKY_NOTES_FILE=str(root / 'Notes.txt'), PRIORITIES_FILE=str(root / 'Pin.md'))
 (root / 'Notes.txt').write_text('Responsibilities\n\nEach agent is responsible for something.\n')
@@ -64,7 +66,7 @@ position = [0., 0.]
 
 
 def move(px, py):
-    input_event('NotifyPointerMotionRelative', '(dd)', (px - position[0], py - position[1]))
+    input_event('NotifyPointerMotionRelative', '(dd)', ((px - position[0]) / xwayland_scale, (py - position[1]) / xwayland_scale))
     position[:] = [px, py]
 
 
@@ -173,8 +175,8 @@ def native_checkboxes(wid, scale):
 
 
 def black_strip(path, before, after):
-    before = {k: round(v * desktop_scale) for k, v in before.items()}
-    after = {k: round(v * desktop_scale) for k, v in after.items()}
+    before = {k: round(v * pixel_ratio) for k, v in before.items()}
+    after = {k: round(v * pixel_ratio) for k, v in after.items()}
     # Check the composited desktop: raw window captures can expose transparent
     # pixels that appear black when converted to RGB. The isolated grey desktop
     # distinguishes visible black artifacts from space exposed during a drag.
@@ -185,7 +187,7 @@ def black_strip(path, before, after):
     pixels = image.load()
     min_width = width - 6
     min_height = height - 6
-    body = image.crop((0, round(50 * scale * desktop_scale), min_width, min_height))
+    body = image.crop((0, round(50 * scale * pixel_ratio), min_width, min_height))
     dark = os.environ.get('ICED_THEME') == 'Dark'
     visible = sum((min(pixel) >= 15 and max(pixel) < 80) if dark else min(pixel) > 210 for pixel in body.getdata())
     assert visible > body.width * body.height / 2, 'The painted app must remain visible'
@@ -268,7 +270,7 @@ try:
                         bounds = mask.crop((0, round(40 * scale * desktop_scale), picture.width, picture.height)).getbbox()
                         assert bounds, 'The window disappeared during a corner drag'
                         record['painted_bounds'] = [bounds[0], bounds[1] + round(40 * scale * desktop_scale), bounds[2], bounds[3] + round(40 * scale * desktop_scale)]
-                        record['anchor_error'] = max(abs(bounds[2] - round((g['X'] + g['WIDTH']) * desktop_scale)), abs(bounds[3] + round(40 * scale * desktop_scale) - round((g['Y'] + g['HEIGHT']) * desktop_scale)))
+                        record['anchor_error'] = max(abs(bounds[2] - round((g['X'] + g['WIDTH']) * pixel_ratio)), abs(bounds[3] + round(40 * scale * desktop_scale) - round((g['Y'] + g['HEIGHT']) * pixel_ratio)))
                     records.append(record)
             finally:
                 stop.set()
