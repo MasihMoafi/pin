@@ -238,7 +238,7 @@ try:
     check('Ctrl+Backspace removes a word and undo restores it')
     x('key', 'Tab', 'Tab', 'Return')
     saved(file, initial)
-    x('key', 'Tab', 'Return')
+    x('key', 'Tab', 'Tab', 'Return')
     saved(file, typed)
     check('Tab and Enter operate toolbar history actions')
     shot('iced-notes-light')
