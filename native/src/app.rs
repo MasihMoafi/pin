@@ -1576,7 +1576,7 @@ mod tests {
     #[test]
     fn tab_reaches_actions_and_skips_disabled_history_buttons() {
         let mut n = note("Hello");
-        for expected in [3, 4, 5, 6, 0] {
+        for expected in [10, 3, 4, 5, 6, 0] {
             let _ = n.update(Message::FocusTab(false));
             assert_eq!(n.focus, expected);
         }
@@ -1634,6 +1634,13 @@ mod tests {
         assert!(matches!(
             shortcut(Physical::Code(Code::KeyS), keyboard::Modifiers::CTRL),
             Some(Message::Save)
+        ));
+        assert!(matches!(
+            shortcut(
+                Physical::Code(Code::KeyM),
+                keyboard::Modifiers::CTRL | keyboard::Modifiers::SHIFT
+            ),
+            Some(Message::TogglePreview)
         ));
     }
 }
