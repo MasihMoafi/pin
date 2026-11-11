@@ -70,6 +70,8 @@ impl Highlighter for Markdown {
 
     fn highlight_line(&mut self, _: &str) -> Self::Iterator<'_> {
         let spans = self.lines.get(self.current).cloned().unwrap_or_default();
+        #[cfg(debug_assertions)]
+        eprintln!("Markdown line {}: {:?}", self.current, spans);
         self.current += 1;
         spans.into_iter()
     }
@@ -80,6 +82,8 @@ impl Highlighter for Markdown {
 }
 
 pub fn format(style: &Style, _: &Theme) -> Format<Font> {
+    #[cfg(debug_assertions)]
+    eprintln!("Markdown format {style:?}");
     Format {
         color: None,
         font: Some(Font {
