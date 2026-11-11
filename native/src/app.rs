@@ -1024,7 +1024,6 @@ impl Notes {
             .height(42)
             .padding([0., 11.5]);
         let editor = text_editor(&self.content)
-            .highlight_with::<markup::Markdown>(self.content.text(), markup::format)
             .id(EDITOR)
             .on_action(Message::Edit)
             .height(Fill)
@@ -1067,7 +1066,8 @@ impl Notes {
                 shortcut(press.physical_key, press.modifiers)
                     .map(text_editor::Binding::Custom)
                     .or_else(|| text_editor::Binding::from_key_press(press))
-            });
+            })
+            .highlight_with::<markup::Markdown>(self.content.text(), markup::format);
         let mut body = column![
             header,
             container(space())
@@ -1117,7 +1117,12 @@ impl Notes {
             )
         } else if let Some(items) = &self.preview {
             let preview: Element<'_, Message> = if items.is_empty() {
-                text("Write a note…").size(15).color_with(muted).into()
+                text("Write a note…")
+                    .size(15)
+                    .style(|theme| text::Style {
+                        color: Some(muted(theme)),
+                    })
+                    .into()
             } else {
                 markdown::view(
                     items,
@@ -1125,7 +1130,7 @@ impl Notes {
                         15,
                         markdown::Style {
                             font: Font::with_name("Inter"),
-                            ..markdown::Style::from(Theme::default())
+                            ..markdown::Style::from(Theme::Light)
                         },
                     ),
                 )
