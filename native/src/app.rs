@@ -1124,7 +1124,7 @@ impl Notes {
                     })
                     .into()
             } else {
-                markdown::view(
+                markdown::view_with(
                     items,
                     markdown::Settings::with_text_size(
                         15,
@@ -1133,8 +1133,8 @@ impl Notes {
                             ..markdown::Style::from(Theme::Light)
                         },
                     ),
+                    &markup::Viewer,
                 )
-                .map(Message::OpenLink)
             };
             body.push(scrollable(container(preview).width(Fill).padding([14., 17.5])).height(Fill))
         } else {

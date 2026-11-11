@@ -1,5 +1,6 @@
 //! Apply CommonMark emphasis to the editable source without changing its bytes.
 use iced::advanced::text::highlighter::{Format, Highlighter};
+use iced::widget::{container, markdown, rich_text};
 use iced::{font, Font, Theme};
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use std::ops::Range;
@@ -9,6 +10,7 @@ pub struct Style {
     bold: bool,
     italic: bool,
     code: bool,
+    arabic: bool,
 }
 
 pub struct Markdown {
@@ -34,13 +36,14 @@ impl Highlighter for Markdown {
                 Event::End(TagEnd::Strong | TagEnd::Heading(_)) => bold -= 1,
                 Event::End(TagEnd::Emphasis) => italic -= 1,
                 Event::End(TagEnd::CodeBlock) => code = false,
-                Event::Text(_) | Event::Code(_) => {
+                Event::Text(ref value) | Event::Code(ref value) => {
                     let style = Style {
                         bold: bold > 0,
                         italic: italic > 0,
                         code: code || matches!(event, Event::Code(_)),
+                        arabic: is_arabic(value),
                     };
-                    if style == Style::default() {
+                    if !style.bold && !style.italic && !style.code {
                         continue;
                     }
                     let mut line = offsets.partition_point(|&start| start <= range.start) - 1;
@@ -70,8 +73,6 @@ impl Highlighter for Markdown {
 
     fn highlight_line(&mut self, _: &str) -> Self::Iterator<'_> {
         let spans = self.lines.get(self.current).cloned().unwrap_or_default();
-        #[cfg(debug_assertions)]
-        eprintln!("Markdown line {}: {:?}", self.current, spans);
         self.current += 1;
         spans.into_iter()
     }
@@ -82,8 +83,6 @@ impl Highlighter for Markdown {
 }
 
 pub fn format(style: &Style, _: &Theme) -> Format<Font> {
-    #[cfg(debug_assertions)]
-    eprintln!("Markdown format {style:?}");
     Format {
         color: None,
         font: Some(Font {
@@ -92,7 +91,7 @@ pub fn format(style: &Style, _: &Theme) -> Format<Font> {
             } else {
                 font::Weight::Normal
             },
-            style: if style.italic {
+            style: if style.italic && !style.arabic {
                 font::Style::Italic
             } else {
                 font::Style::Normal
@@ -103,6 +102,79 @@ pub fn format(style: &Style, _: &Theme) -> Format<Font> {
                 Font::with_name("Inter")
             }
         }),
+    }
+}
+
+fn is_arabic(value: &str) -> bool {
+    value
+        .chars()
+        .any(|c| matches!(c, '\u{600}'..='\u{6ff}' | '\u{750}'..='\u{77f}' | '\u{8a0}'..='\u{8ff}'))
+}
+
+// The desktop's Arabic fonts provide regular and bold faces, without italics.
+// Keep those glyphs readable when an emphasis span requests an unavailable face.
+fn readable_spans(
+    text: &markdown::Text,
+    style: markdown::Style,
+) -> Vec<iced::advanced::text::Span<'static, String>> {
+    text.spans(style)
+        .iter()
+        .cloned()
+        .map(|mut span| {
+            if is_arabic(span.text.as_ref()) {
+                if let Some(font) = &mut span.font {
+                    font.style = font::Style::Normal;
+                }
+            }
+            span
+        })
+        .collect()
+}
+
+pub struct Viewer;
+
+impl<'a> markdown::Viewer<'a, super::Message> for Viewer {
+    fn on_link_click(uri: String) -> super::Message {
+        super::Message::OpenLink(uri)
+    }
+
+    fn paragraph(
+        &self,
+        settings: markdown::Settings,
+        text: &markdown::Text,
+    ) -> iced::Element<'a, super::Message> {
+        rich_text(readable_spans(text, settings.style))
+            .size(settings.text_size)
+            .on_link_click(Self::on_link_click)
+            .into()
+    }
+
+    fn heading(
+        &self,
+        settings: markdown::Settings,
+        level: &'a pulldown_cmark::HeadingLevel,
+        text: &'a markdown::Text,
+        index: usize,
+    ) -> iced::Element<'a, super::Message> {
+        let sizes = [
+            settings.h1_size,
+            settings.h2_size,
+            settings.h3_size,
+            settings.h4_size,
+            settings.h5_size,
+            settings.h6_size,
+        ];
+        container(
+            rich_text(readable_spans(text, settings.style))
+                .size(sizes[*level as usize - 1])
+                .on_link_click(Self::on_link_click),
+        )
+        .padding(iced::padding::top(if index > 0 {
+            settings.text_size / 2.0
+        } else {
+            iced::Pixels::ZERO
+        }))
+        .into()
     }
 }
 

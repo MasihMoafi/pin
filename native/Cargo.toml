@@ -33,6 +33,10 @@ x11-dl = { version = "2.21", optional = true }
 [build-dependencies]
 tauri-build = "2"
 
+# 0.15.0's ASCII shaping fast path ignores emphasis inside Markdown delimiters.
+[patch.crates-io]
+cosmic-text = { git = "https://github.com/pop-os/cosmic-text", rev = "8cd21a315a7eee77fdbfb00e516fb1fe2bfbd4ab" }
+
 [[bin]]
 name = "pin-native"
 path = "src/main.rs"

@@ -21,7 +21,10 @@ wid = None
 
 
 def x(*args):
-    return subprocess.check_output(['xdotool', *map(str, args)], env=env, text=True, stderr=subprocess.DEVNULL).strip()
+    result = subprocess.check_output(['xdotool', *map(str, args)], env=env, text=True, stderr=subprocess.DEVNULL).strip()
+    if args[0] in ('key', 'type', 'windowsize'):
+        time.sleep(.15)
+    return result
 
 
 def wait(test, label):
@@ -79,6 +82,31 @@ def check(label):
     print('PASS', label, flush=True)
 
 
+def font_check(image):
+    # One H in each face, on the same baseline: normal, bold, italic, both.
+    # Ignore the separate asterisk glyphs when comparing weight and slant.
+    line = image.convert('L').crop((18, 57, 410, 86))
+    occupied = [any(line.getpixel((x, y)) < 160 for y in range(line.height)) for x in range(line.width)]
+    groups = []
+    for x, ink in enumerate(occupied):
+        if ink and (x == 0 or not occupied[x - 1]):
+            groups.append([x, x + 1])
+        elif ink:
+            groups[-1][1] = x + 1
+    assert len(groups) == 16, ('Unexpected glyph layout', groups)
+    def glyph(index):
+        start, end = groups[index]
+        points = [(x - start, y) for x in range(start, end) for y in range(line.height) if line.getpixel((x, y)) < 160]
+        top, bottom = min(y for _, y in points), max(y for _, y in points)
+        top_x = [x for x, y in points if y <= top + 1]
+        bottom_x = [x for x, y in points if y >= bottom - 1]
+        return len(points), sum(top_x) / len(top_x) - sum(bottom_x) / len(bottom_x)
+    normal, bold, italic, both = [glyph(i) for i in (0, 3, 7, 12)]
+    assert bold[0] > normal[0] + 5, ('Live bold must draw heavier glyphs', normal, bold)
+    assert italic[1] > normal[1] + 1, ('Live italics must draw slanted glyphs', normal, italic)
+    assert both[0] > italic[0] + 5 and both[1] > bold[1] + 1, ('Nested emphasis must be bold and italic', normal, bold, italic, both)
+
+
 try:
     p, file = start('emphasis', '**Bold** and *italic* and ***both***.\n\nسلام **پررنگ** و *کج*.\n')
     source = file.read_text()
@@ -94,6 +122,9 @@ try:
     x('key', 'ctrl+a', 'ctrl+c')
     assert subprocess.check_output(['xclip', '-selection', 'clipboard', '-out'], env=env).decode() == source
     x('key', 'ctrl+End')
+    file.write_text('H **H** *H* ***H***\n')
+    time.sleep(2.5)
+    font_check(shot('09-live-font-faces'))
     check('Bold, italic, nested and Persian emphasis; reading toggle preserves exact Markdown')
     close(p)
 
@@ -113,7 +144,9 @@ try:
 
     p, file = start('edit-reload', '**Original** and *emphasis*.\n')
     original = file.read_text()
-    x('key', 'ctrl+shift+m', 'ctrl+shift+m', 'ctrl+End')
+    x('key', 'ctrl+shift+m')
+    x('key', 'ctrl+shift+m')
+    x('key', 'ctrl+End')
     x('type', '--clearmodifiers', '--delay', 10, '**Added** and *more*.')
     edited = original + '**Added** and *more*.'
     saved(file, edited)
@@ -128,7 +161,8 @@ try:
     file.write_text(external)
     time.sleep(2.5)
     shot('08-external-preview')
-    x('key', 'ctrl+shift+m', 'ctrl+a', 'ctrl+c')
+    x('key', 'ctrl+shift+m')
+    x('key', 'ctrl+a', 'ctrl+c')
     assert subprocess.check_output(['xclip', '-selection', 'clipboard', '-out'], env=env).decode() == external
     close(p)
     check('Edit after reading, autosave, undo/redo and external reload preserve formatted source')
