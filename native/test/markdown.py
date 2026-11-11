@@ -86,7 +86,9 @@ try:
     editing = shot('01-live-emphasis')
     x('key', 'ctrl+shift+m')
     reading = shot('02-rendered-emphasis')
-    assert ImageChops.difference(editing.crop((18, 60, 400, 240)), reading.crop((18, 60, 400, 240))).getbbox()
+    # The caret is on the trailing empty line, outside this first-line crop.
+    difference = ImageChops.difference(editing.crop((18, 57, 400, 86)), reading.crop((18, 57, 400, 86)))
+    assert sum(max(pixel[:3]) > 12 for pixel in difference.getdata()) > 150, 'Reading view must render the first line without Markdown markers'
     assert file.read_text() == source and file.stat().st_mtime_ns == stamp
     x('key', 'ctrl+shift+m')
     x('key', 'ctrl+a', 'ctrl+c')
