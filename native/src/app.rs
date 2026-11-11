@@ -1,11 +1,12 @@
 //! Shared native Pin and Notes window, persistence and history.
+mod markup;
 mod pin;
 mod reveal;
 use crate::{paths, storage};
 use iced::keyboard::key::{Code, Physical};
 use iced::widget::{
-    button, column, container, mouse_area, operation, row, space, stack, svg, text, text_editor,
-    tooltip,
+    button, column, container, markdown, mouse_area, operation, row, scrollable, space, stack, svg,
+    text, text_editor, tooltip,
 };
 use iced::{
     event, keyboard, mouse, window, Background, Border, Color, Element, Event, Fill, Font, Length,
@@ -66,6 +67,9 @@ enum Message {
     CalendarMove(i32),
     FramePresented,
     DeleteWord(bool),
+    TogglePreview,
+    OpenLink(String),
+    LinkOpened,
 }
 
 struct Snapshot {
@@ -84,6 +88,7 @@ enum Group {
 
 struct Notes {
     content: text_editor::Content,
+    preview: Option<Vec<markdown::Item>>,
     board: Option<pin::State>,
     file: PathBuf,
     settings_file: PathBuf,
@@ -219,6 +224,7 @@ fn shortcut(physical: Physical, modifiers: keyboard::Modifiers) -> Option<Messag
         }),
         Physical::Code(Code::KeyY) => Some(Message::Redo),
         Physical::Code(Code::KeyS) => Some(Message::Save),
+        Physical::Code(Code::KeyM) if modifiers.shift() => Some(Message::TogglePreview),
         Physical::Code(Code::KeyN) => Some(Message::Board(pin::Message::New(false))),
         _ => None,
     }
@@ -229,6 +235,7 @@ impl Notes {
         let content = text_editor::Content::with_text(disk.as_deref().unwrap_or_default());
         let mut initial = Notes {
             content,
+            preview: None,
             board: None,
             file,
             settings_file,
@@ -305,6 +312,7 @@ impl Notes {
         }
     }
     fn changed(&mut self) {
+        self.refresh_preview();
         self.dirty = true;
         self.save_at = Some(Instant::now() + Duration::from_millis(250));
         self.saved_at = None;
@@ -346,6 +354,9 @@ impl Notes {
         self.changed();
     }
     fn focus_editor(&self) -> Task<Message> {
+        if self.preview.is_some() {
+            return Task::none();
+        }
         self.board.as_ref().map_or_else(
             || operation::focus(EDITOR),
             |b| b.focus().map(Message::Board),
@@ -365,6 +376,12 @@ impl Notes {
                 self.content = text_editor::Content::with_text(&value);
                 self.changed();
             }
+        }
+        self.refresh_preview();
+    }
+    fn refresh_preview(&mut self) {
+        if self.preview.is_some() {
+            self.preview = Some(markdown::parse(&self.content.text()).collect());
         }
     }
     fn history(&mut self, redo: bool) -> Task<Message> {
@@ -452,6 +469,38 @@ impl Notes {
             (_, message) => message,
         };
         match message {
+            Message::TogglePreview => {
+                if self.board.is_none() {
+                    self.context = None;
+                    self.preview = if self.preview.is_some() {
+                        None
+                    } else {
+                        Some(markdown::parse(&self.content.text()).collect())
+                    };
+                    self.focus = 0;
+                    return self.focus_editor();
+                }
+            }
+            Message::OpenLink(uri) => {
+                // Opening a link is an explicit user action. Never execute other URI schemes.
+                if uri.starts_with("https://")
+                    || uri.starts_with("http://")
+                    || uri.starts_with("mailto:")
+                {
+                    return Task::perform(
+                        async move {
+                            if let Err(error) = std::process::Command::new("gio")
+                                .args(["open", &uri])
+                                .status()
+                            {
+                                eprintln!("Notes link: {error}");
+                            }
+                        },
+                        |_| Message::LinkOpened,
+                    );
+                }
+            }
+            Message::LinkOpened => (),
             Message::Board(action) => {
                 if self.board.is_none() {
                     return Task::none();
@@ -721,6 +770,8 @@ impl Notes {
                     let mut order = vec![0];
                     if self.board.is_some() {
                         order.push(9);
+                    } else {
+                        order.push(10);
                     }
                     order.extend([1, 2, 3, 4, 5, 6]);
                     if self.conflict {
@@ -857,6 +908,7 @@ impl Notes {
                 .board
                 .as_ref()
                 .map(|_| Message::Board(pin::Message::New(false))),
+            10 => self.board.is_none().then_some(Message::TogglePreview),
             _ => None,
         }
     }
@@ -899,6 +951,21 @@ impl Notes {
                 "plus",
                 Some(Message::Board(pin::Message::New(false))),
                 self.focus == 9,
+            ));
+        } else {
+            header = header.push(icon_button(
+                if self.preview.is_some() {
+                    "Edit Markdown (Ctrl+Shift+M)"
+                } else {
+                    "Read Markdown (Ctrl+Shift+M)"
+                },
+                if self.preview.is_some() {
+                    "pencil"
+                } else {
+                    "eye"
+                },
+                Some(Message::TogglePreview),
+                self.focus == 10,
             ));
         }
         header = header
@@ -999,7 +1066,8 @@ impl Notes {
                 shortcut(press.physical_key, press.modifiers)
                     .map(text_editor::Binding::Custom)
                     .or_else(|| text_editor::Binding::from_key_press(press))
-            });
+            })
+            .highlight_with::<markup::Markdown>(self.content.text(), markup::format);
         let mut body = column![
             header,
             container(space())
@@ -1047,6 +1115,28 @@ impl Notes {
                     .view(Size::new(self.bounds.width, self.bounds.height))
                     .map(Message::Board),
             )
+        } else if let Some(items) = &self.preview {
+            let preview: Element<'_, Message> = if items.is_empty() {
+                text("Write a note…")
+                    .size(15)
+                    .style(|theme| text::Style {
+                        color: Some(muted(theme)),
+                    })
+                    .into()
+            } else {
+                markdown::view_with(
+                    items,
+                    markdown::Settings::with_text_size(
+                        15,
+                        markdown::Style {
+                            font: Font::with_name("Inter"),
+                            ..markdown::Style::from(Theme::Light)
+                        },
+                    ),
+                    &markup::Viewer,
+                )
+            };
+            body.push(scrollable(container(preview).width(Fill).padding([14., 17.5])).height(Fill))
         } else {
             body.push(mouse_area(editor).on_right_press(Message::Context(true)))
         };
@@ -1203,6 +1293,8 @@ fn icon_data(name: &str) -> &'static [u8] {
         "pin" | "pin-filled" => include_bytes!("../icons/pin.svg"),
         "minus" => include_bytes!("../icons/minus.svg"),
         "check" => include_bytes!("../icons/check.svg"),
+        "eye" => include_bytes!("../icons/eye.svg"),
+        "pencil" => include_bytes!("../icons/pencil.svg"),
         _ => include_bytes!("../icons/x.svg"),
     }
 }
@@ -1484,7 +1576,7 @@ mod tests {
     #[test]
     fn tab_reaches_actions_and_skips_disabled_history_buttons() {
         let mut n = note("Hello");
-        for expected in [3, 4, 5, 6, 0] {
+        for expected in [10, 3, 4, 5, 6, 0] {
             let _ = n.update(Message::FocusTab(false));
             assert_eq!(n.focus, expected);
         }
@@ -1542,6 +1634,13 @@ mod tests {
         assert!(matches!(
             shortcut(Physical::Code(Code::KeyS), keyboard::Modifiers::CTRL),
             Some(Message::Save)
+        ));
+        assert!(matches!(
+            shortcut(
+                Physical::Code(Code::KeyM),
+                keyboard::Modifiers::CTRL | keyboard::Modifiers::SHIFT
+            ),
+            Some(Message::TogglePreview)
         ));
     }
 }

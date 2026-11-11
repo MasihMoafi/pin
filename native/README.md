@@ -3,7 +3,7 @@
 Two floating Linux apps use native Rust/Iced widgets with tiny-skia software
 rendering. Both recreate the neutral shadcn style with Lucide icons and need
 no WebView. Pin reads the existing Markdown list and
-`~/.config/Pin/settings.json`; Notes is a plain text scratch pad.
+`~/.config/Pin/settings.json`; Notes edits plain Markdown files.
 
 Run `pin-native` for priorities and `sticky-notes` for the scratch pad. Both
 windows resize, remember their bounds, and can be pinned above other windows.
@@ -45,6 +45,11 @@ Sticky Notes saves to `Documents/Sticky Notes.txt`, using the desktop's
 Documents folder setting. Set `STICKY_NOTES_FILE`, or `file` in
 `~/.config/StickyNotes/settings.json`, to choose another location. It is a
 continuous scratch pad with standard selection, clipboard and a context menu.
+Markdown emphasis styles as you type: `**bold**`, `*italic*`, nested emphasis,
+headings and code. Markers remain editable. The eye button (Ctrl+Shift+M)
+opens a rendered reading view with headings, lists, links and code blocks;
+the pencil button returns to editing. The file keeps its exact Markdown,
+including when it has a `.txt` extension.
 Window settings live in `Pin/iced.json` and `StickyNotes/iced.json`. Each app
 migrates the existing `native.json` window bounds and pin state on its first
 launch, including display scaling. Pin also preserves its folded branches.
@@ -100,6 +105,9 @@ persistence and migration, dark rendering and long-note undo, then records
 paired memory, startup and idle CPU measurements. Run with
 `ICED_TEST_SCALE=2` to check display scaling. The Iced workflow retains the
 raw results and screenshots. Use isolated note files while testing.
+`native/test/markdown.py NOTES OUTPUT` checks live emphasis, the reading view,
+literal markers and code, Unicode, undo/redo and external reload on the same
+hidden display. It retains screenshots of all three cases.
 
 ## Previous WebView implementation
 

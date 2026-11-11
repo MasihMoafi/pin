@@ -43,7 +43,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
   builds on every push and packages on a `v*` tag. Store text: `SNAP_LISTING.md`.
 
 ## Acceptance
-Both Rust apps provide toolbar Undo, Redo and Save. Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and Ctrl+S call the same actions under English and Persian keyboard layouts. Sticky Notes is a plain text scratch pad.
+Both Rust apps provide toolbar Undo, Redo and Save. Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and Ctrl+S call the same actions under English and Persian keyboard layouts. Sticky Notes styles Markdown emphasis while editing and offers a rendered reading view; see [native/README.md](native/README.md).
 
 Drive the native executables with `native/test/pin_iced.py` and `native/test/iced.py` on a hidden display; see `native/README.md`. `native/test/desktop.py` covers the previous WebView version.
 On an isolated GNOME Wayland desktop, `native/test/resize.py PIN NOTES OUTPUT` captures continuous edge drags and checks checkbox contrast, completion and undo. Resizing must retain the painted contents without black frames or edges. During a fast top-left drag, the painted bottom-right corner stays fixed, including when the minimum size is reached.
