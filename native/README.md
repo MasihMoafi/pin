@@ -108,6 +108,9 @@ raw results and screenshots. Use isolated note files while testing.
 `native/test/markdown.py NOTES OUTPUT` checks live emphasis, the reading view,
 literal markers and code, Unicode, undo/redo and external reload on the same
 hidden display. It retains screenshots of all three cases.
+`native/test/text_bounds.py NOTES OUTPUT` checks the editor margins after
+scrolling, typing, undo and resizing at 1x, 1.25x and 2x. The local renderer
+patch is documented in [vendor/iced_tiny_skia/PATCH.md](vendor/iced_tiny_skia/PATCH.md).
 
 ## Previous WebView implementation
 

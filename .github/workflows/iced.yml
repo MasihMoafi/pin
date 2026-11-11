@@ -74,6 +74,7 @@ jobs:
           iced_compositor_pid=$!
           sleep 1
           kill -0 "$iced_compositor_pid"
+          dbus-run-session -- /usr/bin/python3 -I native/test/text_bounds.py native/target/release/notes-iced iced-results/text-bounds
           dbus-run-session -- /usr/bin/python3 -I native/test/markdown.py native/target/release/notes-iced iced-results/markdown
           dbus-run-session -- /usr/bin/python3 -I native/test/pin_iced.py baseline/pin-native native/target/release/pin-iced iced-results/pin-scale1
           ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/pin_iced.py baseline/pin-native native/target/release/pin-iced iced-results/pin-scale2
