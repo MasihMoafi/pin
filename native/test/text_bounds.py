@@ -84,6 +84,9 @@ try:
                 process = subprocess.Popen([binary], env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             children.append(process)
             wid = wait(lambda: x('search', '--onlyvisible', '--pid', process.pid).splitlines()[0], 'Notes opens')
+            # Header tooltips are intentional overlays, outside the text being tested.
+            screen_width, screen_height = map(int, x('getdisplaygeometry').split())
+            x('mousemove', screen_width - 2, screen_height - 2)
             x('windowfocus', wid)
             time.sleep(.5)
             capture('opened')
@@ -109,7 +112,7 @@ try:
             assert process.returncode == 0
             print('CHECKED', name, 'scale', scale, flush=True)
     (output / 'result.json').write_text(json.dumps({'records': records, 'failures': failures}, indent=2) + '\n')
-    assert not failures, f'Text escaped into the bottom margin: {failures[:5]} ({len(failures)} frames)'
+    assert not failures, f'Text escaped the editor viewport: {failures[:5]} ({len(failures)} frames)'
     print('PASS short notes, wrapped scrolling and formatted editing/resizing retain a clear bottom margin', flush=True)
 finally:
     for process in reversed(children):
