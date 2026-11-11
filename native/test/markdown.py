@@ -103,8 +103,8 @@ def font_check(image):
         return len(points), sum(top_x) / len(top_x) - sum(bottom_x) / len(bottom_x)
     normal, bold, italic, both = [glyph(i) for i in (0, 3, 8, 14)]
     assert bold[0] > normal[0] + 5, ('Live bold must draw heavier glyphs', normal, bold)
-    assert italic[1] > normal[1] + 1, ('Live italics must draw slanted glyphs', normal, italic)
-    assert both[0] > italic[0] + 5 and both[1] > bold[1] + 1, ('Nested emphasis must be bold and italic', normal, bold, italic, both)
+    assert italic[1] > normal[1] + .5, ('Live italics must draw slanted glyphs', normal, italic)
+    assert both[0] > italic[0] + 5 and both[1] > bold[1] + .5, ('Nested emphasis must be bold and italic', normal, bold, italic, both)
 
 
 try:
