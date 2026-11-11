@@ -44,6 +44,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 
 ## Acceptance
 Both Rust apps provide toolbar Undo, Redo and Save. Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y and Ctrl+S call the same actions under English and Persian keyboard layouts. Sticky Notes styles Markdown emphasis while editing and offers a rendered reading view; see [native/README.md](native/README.md).
+Note text stays inside the editor viewport: scrolling, editing and resizing must leave its margins clear, without duplicated lines. `native/test/text_bounds.py` checks short, wrapped and formatted notes at 1x, 1.25x and 2x.
 
 Drive the native executables with `native/test/pin_iced.py` and `native/test/iced.py` on a hidden display; see `native/README.md`. `native/test/desktop.py` covers the previous WebView version.
 On an isolated GNOME Wayland desktop, `native/test/resize.py PIN NOTES OUTPUT` captures continuous edge drags and checks checkbox contrast, completion and undo. Resizing must retain the painted contents without black frames or edges. During a fast top-left drag, the painted bottom-right corner stays fixed, including when the minimum size is reached.
