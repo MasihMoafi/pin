@@ -236,7 +236,7 @@ try:
     physical(52)
     saved(file, typed)
     check('Ctrl+Backspace removes a word and undo restores it')
-    x('key', 'Tab', 'Return')
+    x('key', 'Tab', 'Tab', 'Return')
     saved(file, initial)
     x('key', 'Tab', 'Return')
     saved(file, typed)
