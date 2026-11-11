@@ -105,6 +105,9 @@ persistence and migration, dark rendering and long-note undo, then records
 paired memory, startup and idle CPU measurements. Run with
 `ICED_TEST_SCALE=2` to check display scaling. The Iced workflow retains the
 raw results and screenshots. Use isolated note files while testing.
+`native/test/markdown.py NOTES OUTPUT` checks live emphasis, the reading view,
+literal markers and code, Unicode, undo/redo and external reload on the same
+hidden display. It retains screenshots of all three cases.
 
 ## Previous WebView implementation
 
