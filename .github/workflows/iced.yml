@@ -54,9 +54,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download 42990075369 -n pin-iced-linux -D pin-baseline
+      - name: Download the previous Pin presentation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 43692770691 -n pin-iced-linux -D presentation-baseline
       - name: Verify and compare real native apps on a hidden display
         run: |
-          Xvfb :99 -screen 0 1600x1000x24 -nolisten tcp &
+          Xvfb :99 -screen 0 3200x2400x24 -nolisten tcp &
           iced_display_pid=$!
           iced_wm_pid=''
           iced_compositor_pid=''
@@ -78,6 +82,9 @@ jobs:
           iced_compositor_pid=$!
           sleep 1
           kill -0 "$iced_compositor_pid"
+          chmod +x presentation-baseline/pin-iced
+          dbus-run-session -- /usr/bin/python3 -I native/test/presentation.py presentation-baseline/pin-iced iced-results/presentation-baseline --baseline
+          dbus-run-session -- /usr/bin/python3 -I native/test/presentation.py native/target/release/pin-iced iced-results/presentation-revised
           dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks
           ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks-scale2
           chmod +x pin-baseline/pin-iced
