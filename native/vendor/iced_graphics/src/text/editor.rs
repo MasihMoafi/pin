@@ -24,6 +24,7 @@ struct Internal {
     bounds: Size,
     topmost_line_changed: Option<usize>,
     version: text::Version,
+    needs_layout: bool,
 }
 
 impl Editor {
@@ -307,6 +308,7 @@ impl editor::Editor for Editor {
             text::font_system().write().expect("Write font system");
 
         self.with_internal_mut(|internal| {
+            internal.needs_layout = true;
             let editor = &mut internal.editor;
 
             match action {
@@ -509,6 +511,7 @@ impl editor::Editor for Editor {
 
     fn move_to(&mut self, cursor: Cursor) {
         self.with_internal_mut(|internal| {
+            internal.needs_layout = true;
             // TODO: Expose `Affinity`
             internal.editor.set_cursor(cosmic_text::Cursor {
                 line: cursor.position.line,
@@ -552,6 +555,25 @@ impl editor::Editor for Editor {
         new_wrapping: Wrapping,
         new_highlighter: &mut impl Highlighter,
     ) {
+        let internal = self.internal();
+        let buffer = buffer_from_editor(&internal.editor);
+        let metrics = buffer.metrics();
+        if !internal.needs_layout
+            && internal.topmost_line_changed.is_none()
+            && new_bounds == internal.bounds
+            && new_font == internal.font
+            && new_size.0 == metrics.font_size
+            && new_line_height.to_absolute(new_size).0 == metrics.line_height
+            && text::to_wrap(new_wrapping) == buffer.wrap()
+            && text::font_system()
+                .read()
+                .expect("Read font system")
+                .version()
+                == internal.version
+        {
+            return;
+        }
+
         self.with_internal_mut(|internal| {
             let mut font_system =
                 text::font_system().write().expect("Write font system");
@@ -628,6 +650,7 @@ impl editor::Editor for Editor {
             }
 
             internal.editor.shape_as_needed(font_system.raw(), false);
+            internal.needs_layout = false;
         });
     }
 
@@ -741,6 +764,7 @@ impl Default for Internal {
             bounds: Size::ZERO,
             topmost_line_changed: None,
             version: text::Version::default(),
+            needs_layout: true,
         }
     }
 }
