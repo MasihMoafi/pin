@@ -10,6 +10,11 @@ import time
 if os.environ.get('GITHUB_ACTIONS') != 'true':
     raise SystemExit('Run Pin idle measurements on GitHub Actions.')
 
+def terminate(_signum, _frame):
+    raise SystemExit('Interrupted')
+
+signal.signal(signal.SIGTERM, terminate)
+
 binary = str(Path(sys.argv[1]).resolve())
 out = Path(sys.argv[2]).resolve()
 out.mkdir(parents=True, exist_ok=True)
