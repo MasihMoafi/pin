@@ -24,7 +24,7 @@ jobs:
           chmod +x baseline/pin-iced
       - name: Install display dependencies
         run: |
-          packages=(xvfb openbox xdotool x11-utils libxkbcommon-x11-0 fonts-inter fonts-noto-core)
+          packages=(xvfb openbox xdotool x11-utils ripgrep libxkbcommon-x11-0 fonts-inter fonts-noto-core)
           sudo timeout 90 apt-get install -y -qq "${packages[@]}" || {
             sudo timeout 90 apt-get update -qq
             sudo timeout 120 apt-get install -y -qq "${packages[@]}"

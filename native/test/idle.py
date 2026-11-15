@@ -1,4 +1,5 @@
 """Measure focused and background idle at both render scales, without generated input."""
+import ctypes as c
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,22 @@ def cpu(pid):
     return sum(map(int, stat[11:13])) / os.sysconf('SC_CLK_TCK')
 
 results = []
+lib = c.CDLL('libX11.so.6')
+lib.XOpenDisplay.argtypes = [c.c_char_p]
+lib.XOpenDisplay.restype = c.c_void_p
+lib.XDefaultRootWindow.argtypes = [c.c_void_p]
+lib.XDefaultRootWindow.restype = c.c_ulong
+lib.XCreateSimpleWindow.argtypes = [c.c_void_p, c.c_ulong, c.c_int, c.c_int, c.c_uint, c.c_uint, c.c_uint, c.c_ulong, c.c_ulong]
+lib.XCreateSimpleWindow.restype = c.c_ulong
+lib.XMapWindow.argtypes = [c.c_void_p, c.c_ulong]
+lib.XFlush.argtypes = [c.c_void_p]
+lib.XDestroyWindow.argtypes = [c.c_void_p, c.c_ulong]
+lib.XCloseDisplay.argtypes = [c.c_void_p]
+display = lib.XOpenDisplay(None)
+assert display
+control = lib.XCreateSimpleWindow(display, lib.XDefaultRootWindow(display), 0, 0, 60, 40, 0, 0, 0xffffff)
+lib.XMapWindow(display, control)
+lib.XFlush(display)
 for scale in [1, 2]:
     case = out / str(scale)
     config = case / 'config/Pin'
@@ -54,8 +71,11 @@ for scale in [1, 2]:
         dimensions = dict(line.split('=', 1) for line in geometry.splitlines())
         assert int(dimensions['WIDTH']) == 1213*scale and int(dimensions['HEIGHT']) == 884*scale, geometry
         for focused in [True, False]:
-            x(env, 'windowfocus', wid if focused else 0)
+            target = str(wid if focused else control)
+            x(env, 'windowfocus', target)
             time.sleep(2)
+            actual_focus = x(env, 'getwindowfocus')
+            assert actual_focus == target, (target, actual_focus)
             before, began = cpu(p.pid), time.monotonic()
             time.sleep(15)
             elapsed, used = time.monotonic() - began, cpu(p.pid) - before
@@ -67,5 +87,7 @@ for scale in [1, 2]:
             os.killpg(p.pid, signal.SIGTERM)
         p.wait(timeout=5)
 (out / 'results.json').write_text(json.dumps(results, indent=2))
+lib.XDestroyWindow(display, control)
+lib.XCloseDisplay(display)
 if '--baseline' not in sys.argv[3:]:
     assert all(r['cpu_percent_one_core'] <= (2 if r['focused'] else 1) for r in results), results
