@@ -185,6 +185,10 @@ pub fn present(
             })
         })
         .unwrap_or_else(|| vec![Rectangle::with_size(viewport.logical_size())]);
+    let damage = damage::group(
+        damage,
+        Rectangle::with_size(viewport.logical_size()),
+    );
 
     if damage.is_empty() {
         if let Some(last_layers) = last_layers {
@@ -193,11 +197,6 @@ pub fn present(
     } else {
         surface.layer_stack.push_front(renderer.layers().to_vec());
         surface.background_color = background_color;
-
-        let damage = damage::group(
-            damage,
-            Rectangle::with_size(viewport.logical_size()),
-        );
 
         let mut pixels = tiny_skia::PixmapMut::from_bytes(
             bytemuck::cast_slice_mut(&mut buffer),
@@ -216,7 +215,28 @@ pub fn present(
     }
 
     on_pre_present();
-    buffer.present().map_err(|_| compositor::SurfaceError::Lost)
+    // Preserve the renderer's damage all the way to the display server. A
+    // full presentation makes XWayland copy and composite the whole window
+    // even when only a caret or hover highlight changed.
+    let damage: Vec<_> = damage
+        .into_iter()
+        .filter_map(|bounds| {
+            let bounds = bounds * viewport.scale_factor();
+            let x = bounds.x.floor().max(0.0) as u32;
+            let y = bounds.y.floor().max(0.0) as u32;
+            let right = bounds.right().ceil().min(physical_size.width as f32) as u32;
+            let bottom = bounds.bottom().ceil().min(physical_size.height as f32) as u32;
+            Some(softbuffer::Rect {
+                x,
+                y,
+                width: NonZeroU32::new(right.saturating_sub(x))?,
+                height: NonZeroU32::new(bottom.saturating_sub(y))?,
+            })
+        })
+        .collect();
+    buffer
+        .present_with_damage(&damage)
+        .map_err(|_| compositor::SurfaceError::Lost)
 }
 
 pub fn screenshot(

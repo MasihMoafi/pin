@@ -1,7 +1,8 @@
 # Local renderer fix
 
 This is the published `iced_tiny_skia` 0.14.1 source, with its MIT license.
-Only `src/engine.rs` and `src/layer.rs` differ from the published Rust source.
+Only `src/engine.rs`, `src/layer.rs` and `src/window/compositor.rs` differ from
+the published Rust source.
 
 Applied upstream fix: [Always clip `Text::Editor`](https://github.com/iced-rs/iced/commit/23170119b048584a3cc659dd3b04d83bffd87c14).
 It always masks editor glyphs to their viewport. Skipping the mask allows
@@ -17,3 +18,10 @@ quad's index and repaints the remaining task cards on every blink. The
 renderer regression checks in `../../tests/renderer_damage.rs` cover caret
 insertion/removal, task color changes and resizing. Editor viewport masking
 remains enabled.
+
+Presentation sends the damaged rectangles to softbuffer instead of copying
+the whole window to X11 after each small change. Rectangle edges round
+outward at the physical render scale and stay inside the buffer. Empty
+damage sends no image region; a new or resized buffer still presents in
+full. `../../test/presentation.py` checks actual XDamage events for caret,
+typing and hover updates at 1×, 1.25× and 2×, plus minimize/restore and resize.
