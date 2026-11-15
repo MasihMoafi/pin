@@ -91,6 +91,9 @@ jobs:
           assert revised[0]['median_paint_ms'] <= baseline[0]['median_paint_ms'] * 1.2, (baseline[0], revised[0])
           assert revised[0]['burst_ms'] <= baseline[0]['burst_ms'] * 1.2, (baseline[0], revised[0])
           assert any(b['burst_ms'] < a['burst_ms'] * .8 and b['burst_cpu_s'] < a['burst_cpu_s'] for a, b in zip(baseline[1:], revised[1:])), (baseline, revised)
+          large = revised[0]['movement']['1213']
+          assert large['task']['cpu_percent_one_core'] <= 10, large
+          assert large['hover']['cpu_percent_one_core'] <= 5, large
           print('PASS input speed gate: small lists retain latency; larger lists use less CPU and finish at least 20 percent faster')
           PY
           dbus-run-session -- /usr/bin/python3 -I native/test/text_bounds.py native/target/release/notes-iced iced-results/text-bounds

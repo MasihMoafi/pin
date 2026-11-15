@@ -1,4 +1,5 @@
 //! Shared native Pin and Notes window, persistence and history.
+mod drag;
 mod markup;
 mod pin;
 mod reveal;
