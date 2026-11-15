@@ -12,13 +12,13 @@ use std::sync::Mutex;
 struct Exposure {
     tracked: bool,
     full: bool,
-    bounds: Option<Rectangle>,
+    bounds: Vec<Rectangle>,
 }
 
 static EXPOSURE: Mutex<Exposure> = Mutex::new(Exposure {
     tracked: false,
     full: false,
-    bounds: None,
+    bounds: Vec::new(),
 });
 
 fn union(a: Rectangle, b: Rectangle) -> Rectangle {
@@ -41,7 +41,7 @@ pub fn window_exposed(bounds: Option<Rectangle>) {
     let mut exposure = EXPOSURE.lock().unwrap();
     exposure.tracked = true;
     if let Some(bounds) = bounds {
-        exposure.bounds = Some(exposure.bounds.map_or(bounds, |old| union(old, bounds)));
+        exposure.bounds.push(bounds);
     } else {
         exposure.full = true;
     }
@@ -276,11 +276,11 @@ pub fn present(
                 physical_size.width as f32,
                 physical_size.height as f32,
             ))];
-        } else if let Some(bounds) = exposure.bounds {
-            damage.push(bounds);
+        } else {
+            damage.extend(exposure.bounds.iter().copied());
         }
         exposure.full = false;
-        exposure.bounds = None;
+        exposure.bounds.clear();
     }
 
     on_pre_present();
