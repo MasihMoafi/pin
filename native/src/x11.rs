@@ -77,7 +77,13 @@ unsafe extern "C" fn decode_expose(
             && unsafe { (*event).get_type() } == xlib::Expose
             && unsafe { (*event).expose.window } == state.window
         {
-            iced_tiny_skia::window::compositor::window_exposed();
+            let exposed = unsafe { (*event).expose };
+            iced_tiny_skia::window::compositor::window_exposed(Some(Rectangle {
+                x: exposed.x as f32,
+                y: exposed.y as f32,
+                width: exposed.width as f32,
+                height: exposed.height as f32,
+            }));
         }
         result
     })
@@ -218,7 +224,7 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                 pending: None,
                 drawn: None,
             });
-            iced_tiny_skia::window::compositor::window_exposed();
+            iced_tiny_skia::window::compositor::window_exposed(None);
         }
         if let Some(state) = state.as_ref() {
             // All fields are X11 scalar values; only the two masked fields apply.

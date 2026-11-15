@@ -86,6 +86,17 @@ jobs:
           chmod +x presentation-baseline/pin-iced
           dbus-run-session -- /usr/bin/python3 -I native/test/presentation.py presentation-baseline/pin-iced iced-results/presentation-baseline --baseline
           dbus-run-session -- /usr/bin/python3 -I native/test/presentation.py native/target/release/pin-iced iced-results/presentation-revised
+          /usr/bin/python3 - <<'PY'
+          import json
+          from pathlib import Path
+          before = json.loads(Path('iced-results/presentation-baseline/results.json').read_text())['cases'][-1]['cases']
+          after = json.loads(Path('iced-results/presentation-revised/results.json').read_text())['cases'][-1]['cases']
+          for name in ['typing', 'window', 'task']:
+              old = before[name]['app_cpu_percent'] + before[name]['display_cpu_percent']
+              new = after[name]['app_cpu_percent'] + after[name]['display_cpu_percent']
+              assert new < old * .8, (name, old, new)
+          print('PASS active CPU gate: typing, window movement and task dragging use at least 20 percent less combined app/display CPU at 2x')
+          PY
           dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks
           ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks-scale2
           chmod +x pin-baseline/pin-iced

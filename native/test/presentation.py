@@ -104,7 +104,7 @@ baseline = '--baseline' in sys.argv[3:]
 
 
 def x(env, *args):
-    return subprocess.check_output(['xdotool', *map(str, args)], env=env, text=True, stderr=subprocess.DEVNULL).strip()
+    return subprocess.check_output(['xdotool', *map(str, args)], env=env, text=True, stderr=subprocess.DEVNULL, timeout=10).strip()
 
 
 def geometry(env, wid):
