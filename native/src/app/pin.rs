@@ -47,6 +47,7 @@ impl Target {
 pub enum Message {
     Edit(Target, text_editor::Action),
     New(bool),
+    AddSubtask(u64),
     Split(u64),
     Remove(u64),
     Toggle(u64),
@@ -323,6 +324,37 @@ impl State {
             _ => None,
         }
     }
+    pub fn changes_document(&self, message: &Message) -> bool {
+        match message {
+            Message::Edit(_, action) => action.is_edit(),
+            Message::New(_)
+            | Message::AddSubtask(_)
+            | Message::Split(_)
+            | Message::Remove(_)
+            | Message::Toggle(_)
+            | Message::Fold(_)
+            | Message::Indent(_, _)
+            | Message::Move(_, _)
+            | Message::PickDate(_)
+            | Message::TimePart(_, _)
+            | Message::Daily
+            | Message::Color(_)
+            | Message::ApplyDate
+            | Message::ClearDate
+            | Message::ClearTime
+            | Message::ApplyColor
+            | Message::Copy(true)
+            | Message::Pasted(Some(_))
+            | Message::DeleteWord(_, _) => true,
+            Message::Activate => self
+                .options
+                .as_ref()
+                .and_then(|o| self.option_action(o.focus))
+                .is_some_and(|action| self.changes_document(&action)),
+            Message::Drop => self.dragging.is_some() && self.drop.is_some(),
+            _ => false,
+        }
+    }
     fn sync(&mut self) {
         self.editors
             .retain(|id, _| self.board.tasks.iter().any(|t| t.id == *id));
@@ -338,6 +370,10 @@ impl State {
         let Some(c) = self.editor_mut(target) else {
             return;
         };
+        if !action.is_edit() {
+            c.perform(action);
+            return;
+        }
         let before = c.text();
         let action = match action {
             text_editor::Action::Edit(text_editor::Edit::Paste(value)) => {
@@ -353,7 +389,6 @@ impl State {
             if let Target::Item(id) = target {
                 if let Some(i) = self.board.index(id) {
                     self.board.tasks[i].text = value.replace(['\r', '\n'], " ");
-                    self.sync();
                 }
             }
             self.revision += 1;
@@ -388,6 +423,12 @@ impl State {
                 self.options = None;
                 self.new_item(parent, String::new());
                 return self.focus_and_reveal();
+            }
+            Message::AddSubtask(id) => {
+                if self.board.index(id).is_some() {
+                    self.active = Target::Item(id);
+                    return self.update(Message::New(true));
+                }
             }
             Message::Split(id) => {
                 if let Some(i) = self.board.index(id) {
@@ -881,7 +922,7 @@ impl State {
                 }
                 Physical::Code(Code::KeyY) => Some(Message::Redo),
                 Physical::Code(Code::KeyS) => Some(Message::Save),
-                Physical::Code(Code::KeyN) => Some(Message::New(false)),
+                Physical::Code(Code::KeyN) => Some(Message::New(shift)),
                 Physical::Code(Code::KeyT) => Some(Message::New(true)),
                 Physical::Code(Code::KeyD) => Some(Message::Options(id)),
                 Physical::Code(Code::Period) => Some(Message::Fold(id)),
@@ -1123,6 +1164,13 @@ impl State {
             false,
         )
         .map(move |_| Message::Options(id));
+        let subtask = icon_button(
+            "Add subtask (Ctrl+Shift+N)",
+            "plus",
+            Some(super::Message::Board(Message::AddSubtask(id))),
+            false,
+        )
+        .map(move |_| Message::AddSubtask(id));
         let check = checkbox(t.done)
             .size(17)
             .on_toggle(move |_| Message::Toggle(id))
@@ -1164,6 +1212,9 @@ impl State {
                     ..Default::default()
                 }),
             container(content).width(Fill),
+            container(subtask)
+                .height(CONTROL_HEIGHT)
+                .align_y(iced::Center),
             container(grip).height(CONTROL_HEIGHT).align_y(iced::Center),
             container(options)
                 .height(CONTROL_HEIGHT)
@@ -1507,6 +1558,33 @@ mod tests {
         assert_eq!(s.board.tasks[2].depth, 1);
         assert_eq!(s.board.tasks[2].color, None);
         assert_eq!(s.board.tasks[3].text, "Older child");
+    }
+
+    #[test]
+    fn row_plus_targets_its_own_folded_parent_and_focuses_the_new_child() {
+        let mut s = State::new(
+            "- [ ] Other\n- [ ] Parent\n  - [ ] Older child\n    - [ ] Grandchild\n",
+            &[],
+        );
+        s.folded.insert(2);
+        let before = s.snapshot();
+        let original = s.markdown();
+        let _ = s.update(Message::AddSubtask(2));
+        let Target::Item(id) = s.active else {
+            panic!("New subtask must have focus");
+        };
+        let _ = s.update(Message::Edit(
+            Target::Item(id),
+            text_editor::Action::Edit(text_editor::Edit::Paste(Arc::new("New child".into()))),
+        ));
+        assert_eq!(
+            s.markdown(),
+            "- [ ] Other\n- [ ] Parent\n  - [ ] New child\n  - [ ] Older child\n    - [ ] Grandchild\n"
+        );
+        assert!(!s.folded.contains(&2));
+        let _ = s.restore(before);
+        assert_eq!(s.markdown(), original);
+        assert!(s.folded.contains(&2));
     }
 
     #[test]

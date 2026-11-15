@@ -28,12 +28,12 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 - The task options offer daily recurrence; completed daily tasks reopen on the next local date, preserving any time.
 - Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
   Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
-- Each row has a checkbox, text and ⋯ (daily recurrence, color, date, subtask, delete). Options open as dropdown menus over the list; dates use a month calendar and times use hour/minute dropdowns, as in the earlier calendar UI.
+- Each row has a checkbox, text, + (add subtask), and ⋯ (daily recurrence, color, date, subtask, delete). The + adds a child to that row even when another task has focus, unfolds its parent, and focuses the child. Options open as dropdown menus over the list; dates use a month calendar and times use hour/minute dropdowns, as in the earlier calendar UI.
 - Checkboxes have a clear gap before the text; chevrons, checkboxes and trailing controls share the center of the first text line, including wrapped tasks. Separate rows have visible space between them.
 - Unchecked shadcn checkboxes keep a solid background and an outline with at least 3:1 contrast against task colors in light and dark themes.
 - A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
   away (also Ctrl+.); the folded tasks are remembered on this computer, never written to the file.
-- Hotkeys: Ctrl+T subtask, Ctrl+D date, Ctrl+Shift+Backspace delete, Ctrl+Enter done, Alt+↑/↓ move;
+- Hotkeys: Ctrl+N task, Ctrl+Shift+N subtask (Ctrl+T also works), Ctrl+D date, Ctrl+Shift+Backspace delete, Ctrl+Enter done, Alt+↑/↓ move;
   Enter splits at the caret; Tab / Shift+Tab nest and lift; Backspace on an empty task deletes it.
 - The task options offer twelve colors plus any custom color. A new task takes its neighbor's color.
 - Dates read as Elpis Automations shows them; today is green, past and not done is red.

@@ -1,7 +1,7 @@
 name: Native Iced apps
 on:
   push:
-    branches: [work/iced-notes, work/iced-pin, work/iced-pin-integrated, work/recording-fixes-20261110, 'work/notes-markdown-*']
+    branches: [work/iced-notes, work/iced-pin, work/iced-pin-integrated, work/recording-fixes-20261110, 'work/notes-markdown-*', 'work/pin-speed-*']
     paths: ['native/**', '.github/workflows/iced.yml']
   workflow_dispatch:
 permissions:
@@ -50,6 +50,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download 42611779863 -n pin-native-linux -D baseline
+      - name: Download the verified native Pin baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 42990075369 -n pin-iced-linux -D pin-baseline
       - name: Verify and compare real native apps on a hidden display
         run: |
           Xvfb :99 -screen 0 1600x1000x24 -nolisten tcp &
@@ -74,6 +78,11 @@ jobs:
           iced_compositor_pid=$!
           sleep 1
           kill -0 "$iced_compositor_pid"
+          dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks
+          ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks-scale2
+          chmod +x pin-baseline/pin-iced
+          dbus-run-session -- /usr/bin/python3 -I native/test/responsiveness.py pin-baseline/pin-iced iced-results/responsiveness-baseline
+          dbus-run-session -- /usr/bin/python3 -I native/test/responsiveness.py native/target/release/pin-iced iced-results/responsiveness-revised
           dbus-run-session -- /usr/bin/python3 -I native/test/text_bounds.py native/target/release/notes-iced iced-results/text-bounds
           dbus-run-session -- /usr/bin/python3 -I native/test/markdown.py native/target/release/notes-iced iced-results/markdown
           dbus-run-session -- /usr/bin/python3 -I native/test/pin_iced.py baseline/pin-native native/target/release/pin-iced iced-results/pin-scale1
