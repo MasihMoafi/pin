@@ -161,16 +161,15 @@ pub fn run(priorities: bool) -> iced::Result {
                 file.clone(),
                 settings_file.clone(),
                 initial_bounds.clone(),
-                disk.clone(),
+                if priorities { None } else { disk.clone() },
             );
             if priorities {
+                notes.disk = disk.clone();
                 notes.board = Some(pin::State::new(
                     disk.as_deref().unwrap_or_default(),
                     &initial_bounds.folded,
                 ));
-                notes.content =
-                    text_editor::Content::with_text(&notes.board.as_ref().unwrap().markdown());
-                if disk.as_ref().is_some_and(|s| *s != notes.content.text()) {
+                if disk.as_ref().is_some_and(|s| *s != notes.text()) {
                     notes.changed();
                 }
             }
@@ -305,7 +304,11 @@ impl Notes {
     }
     fn snapshot(&self) -> Snapshot {
         Snapshot {
-            text: self.content.text(),
+            text: if self.board.is_none() {
+                self.content.text()
+            } else {
+                String::new()
+            },
             cursor: self.content.cursor(),
             scroll: self.scroll,
             board: self.board.as_ref().map(pin::State::snapshot),
@@ -370,15 +373,22 @@ impl Notes {
             .as_ref()
             .map_or_else(|| self.content.selection(), pin::State::selection)
     }
-    fn load_board(&mut self) {
+    fn text(&self) -> String {
+        self.board
+            .as_ref()
+            .map_or_else(|| self.content.text(), pin::State::markdown)
+    }
+    fn load_document(&mut self) {
+        let value = self.disk.as_deref().unwrap_or_default();
         if let Some(board) = &self.board {
-            let next = pin::State::new(&self.content.text(), &board.folded_keys());
-            let value = next.markdown();
+            let next = pin::State::new(value, &board.folded_keys());
+            let changed = next.markdown() != value;
             self.board = Some(next);
-            if value != self.content.text() {
-                self.content = text_editor::Content::with_text(&value);
+            if changed {
                 self.changed();
             }
+        } else {
+            self.content = text_editor::Content::with_text(value);
         }
         self.refresh_preview();
     }
@@ -404,12 +414,13 @@ impl Notes {
                 (Some(board), Some(snapshot)) => board.restore(snapshot).map(Message::Board),
                 _ => Task::none(),
             };
-            let value = self.board.as_ref().map_or(next.text, pin::State::markdown);
-            self.content = text_editor::Content::with_text(&value);
-            self.content.move_to(next.cursor);
-            self.scroll = next.scroll;
-            self.content
-                .perform(text_editor::Action::Scroll { lines: self.scroll });
+            if self.board.is_none() {
+                self.content = text_editor::Content::with_text(&next.text);
+                self.content.move_to(next.cursor);
+                self.scroll = next.scroll;
+                self.content
+                    .perform(text_editor::Action::Scroll { lines: self.scroll });
+            }
             self.group = None;
             self.changed();
             return task;
@@ -423,7 +434,7 @@ impl Notes {
         if !self.dirty && !force {
             return true;
         }
-        let value = self.content.text();
+        let value = self.text();
         match storage::save(&self.file, &value, &self.disk) {
             Ok(true) => {
                 self.disk = Some(value);
@@ -543,7 +554,6 @@ impl Notes {
                     board.anchor_options(self.pointer);
                 }
                 if board.revision != revision {
-                    self.content = text_editor::Content::with_text(&board.markdown());
                     self.record(before, kind);
                 } else {
                     self.group = None;
@@ -577,7 +587,6 @@ impl Notes {
                     let revision = board.revision;
                     let _ = board.update(pin::Message::Tick);
                     if board.revision != revision {
-                        self.content = text_editor::Content::with_text(&board.markdown());
                         self.changed();
                     }
                 }
@@ -605,10 +614,7 @@ impl Notes {
                                 self.conflict = true;
                             } else {
                                 self.disk = disk;
-                                self.content = text_editor::Content::with_text(
-                                    self.disk.as_deref().unwrap_or_default(),
-                                );
-                                self.load_board();
+                                self.load_document();
                                 self.undo.clear();
                                 self.redo.clear();
                                 self.group = None;
@@ -876,12 +882,10 @@ impl Notes {
                     self.undo.push(self.snapshot());
                     self.redo.clear();
                     self.disk = disk;
-                    self.content =
-                        text_editor::Content::with_text(self.disk.as_deref().unwrap_or_default());
                     self.dirty = false;
                     self.conflict = false;
                     self.save_at = None;
-                    self.load_board();
+                    self.load_document();
                     self.group = None;
                     self.focus = 0;
                     return self.focus_editor();
@@ -1579,18 +1583,18 @@ mod tests {
                 ch,
             ))));
         }
-        let typed = n.content.text();
+        let typed = n.text();
         let _ = n.update(Message::Undo);
-        assert_eq!(n.content.text(), initial);
+        assert_eq!(n.text(), initial);
         let _ = n.update(Message::Redo);
-        assert_eq!(n.content.text(), typed);
+        assert_eq!(n.text(), typed);
         let _ = n.update(edit(text_editor::Action::SelectAll));
         let _ = n.update(edit(text_editor::Action::Edit(
             text_editor::Edit::Backspace,
         )));
-        assert_eq!(n.content.text(), "- [ ] \n- [ ] Other\n");
+        assert_eq!(n.text(), "- [ ] \n- [ ] Other\n");
         let _ = n.update(Message::Undo);
-        assert_eq!(n.content.text(), typed);
+        assert_eq!(n.text(), typed);
         assert_eq!(
             n.board.as_ref().unwrap().selection().as_deref(),
             Some("Hello First")
@@ -1598,7 +1602,7 @@ mod tests {
         let _ = n.update(Message::Board(pin::Message::Remove(1)));
         let _ = n.update(edit(text_editor::Action::Move(text_editor::Motion::Left)));
         let _ = n.update(Message::Undo);
-        assert_eq!(n.content.text(), typed);
+        assert_eq!(n.text(), typed);
     }
 
     #[test]

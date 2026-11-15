@@ -11,6 +11,9 @@ import time
 
 from PIL import ImageGrab, ImageChops
 
+if os.environ.get('GITHUB_ACTIONS') != 'true':
+    raise SystemExit('Run Pin stress measurements on GitHub Actions to keep the workstation quiet.')
+
 binary, output = sys.argv[1:]
 root = Path(output).resolve()
 root.mkdir(parents=True, exist_ok=True)
