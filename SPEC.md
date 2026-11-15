@@ -23,6 +23,11 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 - App icon: the tilted pin in `logo/` (approved 7 Nov), on a light tile.
 - Follow the desktop light/dark preference live, including menus, fields and task colors.
 
+## Performance
+- Pin is a lightweight task list: idle CPU stays near zero, and moving the window or a task must remain responsive without rebuilding unchanged content for each pointer position.
+- Measure background and active CPU, pointer/typing response time, and proportional memory (PSS). Compare identical task lists, window sizes and input traces on the same machine; report focused caret activity separately from background idle.
+- [native/test/responsiveness.py](native/test/responsiveness.py) owns repeatable baseline comparisons for typing, hover, window movement and task dragging. Its stress cases run only on GitHub Actions.
+
 ## Tasks
 - Task text wraps and grows vertically at every window width; no line may be clipped.
 - The task options offer daily recurrence; completed daily tasks reopen on the next local date, preserving any time.
