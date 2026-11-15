@@ -1110,7 +1110,7 @@ impl State {
             .padding([EDITOR_PADDING, 0.])
             .size(TEXT_SIZE)
             .line_height(iced::widget::text::LineHeight::Absolute(LINE_HEIGHT.into()))
-            .wrapping(iced::widget::text::Wrapping::Word)
+            .wrapping(iced::widget::text::Wrapping::WordOrGlyph)
             .placeholder("New priority")
             .style(move |theme, _| text_editor::Style {
                 background: Color::TRANSPARENT.into(),

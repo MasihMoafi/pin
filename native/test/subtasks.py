@@ -143,7 +143,10 @@ for label in ['mouse', 'keyboard', 'nested']:
             saved(nested)
             x('windowsize', wid, 280*scale, 560*scale)
             time.sleep(.3)
-            shot('nested-narrow')
+            picture = shot('nested-narrow')
+            rows = boxes(picture, scale)
+            assert len(rows) == 6, rows
+            assert rows[4][1] - rows[3][1] >= 65 * scale, 'A nested word must wrap rather than clip at minimum width'
             x('key', 'ctrl+shift+BackSpace', 'ctrl+z')
             saved(nested)
             x('key', 'ctrl+s')
