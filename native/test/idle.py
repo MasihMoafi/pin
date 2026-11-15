@@ -67,4 +67,5 @@ for scale in [1, 2]:
             os.killpg(p.pid, signal.SIGTERM)
         p.wait(timeout=5)
 (out / 'results.json').write_text(json.dumps(results, indent=2))
-assert all(r['cpu_percent_one_core'] <= (2 if r['focused'] else 1) for r in results), results
+if '--baseline' not in sys.argv[3:]:
+    assert all(r['cpu_percent_one_core'] <= (2 if r['focused'] else 1) for r in results), results
