@@ -198,7 +198,7 @@ for scale in [1, 1.25, 2]:
         before.save(case / 'before-minimize.png')
         x(env, 'windowminimize', wid)
         time.sleep(.3)
-        x(env, 'windowmap', wid, 'windowfocus', wid)
+        x(env, 'windowactivate', '--sync', wid)
         time.sleep(.7)
         after = shot()
         after.save(case / 'after-restore.png')
