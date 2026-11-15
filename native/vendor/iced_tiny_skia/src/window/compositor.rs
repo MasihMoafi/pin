@@ -7,16 +7,44 @@ use crate::{Layer, Renderer, Settings};
 
 use std::collections::VecDeque;
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
-static EXPOSURES: AtomicU64 = AtomicU64::new(0);
+struct Exposure {
+    tracked: bool,
+    full: bool,
+    bounds: Option<Rectangle>,
+}
+
+static EXPOSURE: Mutex<Exposure> = Mutex::new(Exposure {
+    tracked: false,
+    full: false,
+    bounds: None,
+});
+
+fn union(a: Rectangle, b: Rectangle) -> Rectangle {
+    let x = a.x.min(b.x);
+    let y = a.y.min(b.y);
+    Rectangle {
+        x,
+        y,
+        width: (a.x + a.width).max(b.x + b.width) - x,
+        height: (a.y + a.height).max(b.y + b.height) - y,
+    }
+}
 
 /// Invalidate retained window pixels after an X11 Expose event.
 ///
-/// Call once after installing the Expose handler, then on every exposure.
-/// Until a handler opts in, presentation continues to copy full frames.
-pub fn window_exposed() {
-    let _ = EXPOSURES.fetch_add(1, Ordering::Release);
+/// Single-window X11 apps call with `None` after installing their handler,
+/// then the exposed rectangle in physical pixels on each event. Until a
+/// handler opts in, presentation continues to copy full frames.
+pub fn window_exposed(bounds: Option<Rectangle>) {
+    let mut exposure = EXPOSURE.lock().unwrap();
+    exposure.tracked = true;
+    if let Some(bounds) = bounds {
+        exposure.bounds = Some(exposure.bounds.map_or(bounds, |old| union(old, bounds)));
+    } else {
+        exposure.full = true;
+    }
 }
 
 pub struct Compositor {
@@ -33,7 +61,6 @@ pub struct Surface {
     layer_stack: VecDeque<Vec<Layer>>,
     background_color: Color,
     max_age: u8,
-    exposure: u64,
 }
 
 impl crate::graphics::Compositor for Compositor {
@@ -85,7 +112,6 @@ impl crate::graphics::Compositor for Compositor {
             layer_stack: VecDeque::new(),
             background_color: Color::BLACK,
             max_age: 0,
-            exposure: 0,
         };
 
         if width > 0 && height > 0 {
@@ -209,7 +235,11 @@ pub fn present(
     let damage = damage::group(
         damage,
         Rectangle::with_size(viewport.logical_size()),
-    );
+    )
+    .into_iter()
+    .reduce(union)
+    .into_iter()
+    .collect::<Vec<_>>();
 
     if damage.is_empty() {
         if let Some(last_layers) = last_layers {
@@ -235,13 +265,23 @@ pub fn present(
         );
     }
 
-    let exposure = EXPOSURES.load(Ordering::Acquire);
-    let damage = if exposure == 0 || surface.exposure != exposure {
-        vec![Rectangle::with_size(viewport.logical_size())]
-    } else {
-        damage
-    };
-    surface.exposure = exposure;
+    let mut damage: Vec<_> = damage
+        .into_iter()
+        .map(|bounds| bounds * viewport.scale_factor())
+        .collect();
+    {
+        let mut exposure = EXPOSURE.lock().unwrap();
+        if !exposure.tracked || exposure.full {
+            damage = vec![Rectangle::with_size(Size::new(
+                physical_size.width as f32,
+                physical_size.height as f32,
+            ))];
+        } else if let Some(bounds) = exposure.bounds {
+            damage.push(bounds);
+        }
+        exposure.full = false;
+        exposure.bounds = None;
+    }
 
     on_pre_present();
     // Preserve the renderer's damage all the way to the display server. A
@@ -250,7 +290,6 @@ pub fn present(
     let damage: Vec<_> = damage
         .into_iter()
         .filter_map(|bounds| {
-            let bounds = bounds * viewport.scale_factor();
             let x = bounds.x.floor().max(0.0) as u32;
             let y = bounds.y.floor().max(0.0) as u32;
             let right = (bounds.x + bounds.width)
