@@ -74,7 +74,7 @@ for scale in [1, 2]:
             target = str(wid if focused else control)
             x(env, 'windowfocus', target)
             time.sleep(2)
-            actual_focus = x(env, 'getwindowfocus')
+            actual_focus = x(env, 'getwindowfocus', '-f')
             assert actual_focus == target, (target, actual_focus)
             before, began = cpu(p.pid), time.monotonic()
             time.sleep(15)
