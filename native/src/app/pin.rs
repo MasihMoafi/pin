@@ -189,6 +189,12 @@ impl State {
     pub fn has_options(&self) -> bool {
         self.options.is_some()
     }
+    pub fn has_error(&self) -> bool {
+        self.options.as_ref().is_some_and(|o| o.error.is_some())
+    }
+    pub fn today(&self) -> &str {
+        &self.today
+    }
     pub fn markdown(&self) -> String {
         self.board.markdown()
     }
@@ -1023,9 +1029,12 @@ impl State {
             .padding([7, 9])
             .on_press(Message::New(false))
             .style(super::ghost);
-        let footer = mouse_area(container(add).width(Fill).padding([2, 0]))
-            .on_enter(last.map_or(Message::CancelDrag, |id| Message::Over(id, true)))
-            .on_exit(last.map_or(Message::CancelDrag, Message::Leave));
+        let mut footer = mouse_area(container(add).width(Fill).padding([2, 0]));
+        if self.dragging.is_some() {
+            footer = footer
+                .on_enter(last.map_or(Message::CancelDrag, |id| Message::Over(id, true)))
+                .on_exit(last.map_or(Message::CancelDrag, Message::Leave));
+        }
         body = body.push(footer);
         let list = container(
             scrollable(body)
@@ -1261,10 +1270,13 @@ impl State {
                 },
                 ..Default::default()
             });
-        mouse_area(body)
-            .on_enter(Message::Over(id, false))
-            .on_exit(Message::Leave(id))
-            .into()
+        let mut area = mouse_area(body);
+        if self.dragging.is_some() {
+            area = area
+                .on_enter(Message::Over(id, false))
+                .on_exit(Message::Leave(id));
+        }
+        area.into()
     }
     fn field(&self, target: Target, placeholder: &'static str) -> Element<'_, Message> {
         let content = self.editor(target).expect("option field");

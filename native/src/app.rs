@@ -15,8 +15,9 @@ use iced::{
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::{
+    hash::{Hash, Hasher},
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 use unicode_segmentation::UnicodeSegmentation;
@@ -86,6 +87,34 @@ enum Group {
     Board(u64, u8),
 }
 
+#[derive(Default)]
+struct WindowInput {
+    pointer: Point,
+    position: Option<Point>,
+}
+
+#[derive(Clone, Default)]
+struct EventCache(Arc<Mutex<WindowInput>>);
+
+impl Hash for EventCache {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Arc::as_ptr(&self.0).hash(state);
+    }
+}
+
+impl EventCache {
+    fn observe(&self, message: Message) -> Option<Message> {
+        match message {
+            Message::Pointer(pointer) => self.0.lock().unwrap().pointer = pointer,
+            Message::Window(_, window::Event::Moved(position)) => {
+                self.0.lock().unwrap().position = Some(position);
+            }
+            message => return Some(message),
+        }
+        None
+    }
+}
+
 struct Notes {
     content: text_editor::Content,
     preview: Option<Vec<markdown::Item>>,
@@ -106,7 +135,7 @@ struct Notes {
     window: Option<window::Id>,
     focus: u8,
     menu_focus: usize,
-    pointer: Point,
+    input: EventCache,
     context: Option<Point>,
     initial_position: Option<(Point, bool)>,
 }
@@ -252,7 +281,7 @@ impl Notes {
             window: None,
             focus: 0,
             menu_focus: 0,
-            pointer: Point::ORIGIN,
+            input: EventCache::default(),
             context: None,
             initial_position: None,
         };
@@ -263,15 +292,32 @@ impl Notes {
     }
 
     fn subscription(&self) -> Subscription<Message> {
+        let active = self.save_at.is_some()
+            || self.saved_at.is_some()
+            || self.error.is_some()
+            || self.board.as_ref().is_some_and(pin::State::has_error);
         Subscription::batch([
-            iced::time::every(
-                if self.save_at.is_some() || self.saved_at.is_some() || self.error.is_some() {
-                    Duration::from_millis(250)
-                } else {
-                    Duration::from_secs(2)
-                },
-            )
-            .map(|_| Message::Tick),
+            iced::time::every(if active {
+                Duration::from_millis(250)
+            } else {
+                Duration::from_secs(2)
+            })
+            .with((
+                active,
+                self.file.clone(),
+                self.disk.clone(),
+                self.conflict,
+                self.board.as_ref().map(|b| b.today().to_owned()),
+            ))
+            .filter_map(|((active, file, expected, conflict, today), _)| {
+                (active
+                    || today.is_some_and(|day| {
+                        day != chrono::Local::now().format("%Y-%m-%d").to_string()
+                    })
+                    || (!conflict
+                        && matches!(storage::read(&file), Ok(value) if value != expected)))
+                .then_some(Message::Tick)
+            }),
             window::frames()
                 .filter_map(|_| crate::x11::pending().then_some(Message::FramePresented)),
             event::listen_with(|event, status, id| match event {
@@ -299,7 +345,9 @@ impl Notes {
                     shortcut(physical_key, modifiers).or_else(|| navigation(&key, modifiers))
                 }
                 _ => None,
-            }),
+            })
+            .with(self.input.clone())
+            .filter_map(|(input, message)| input.observe(message)),
         ])
     }
     fn snapshot(&self) -> Snapshot {
@@ -463,6 +511,10 @@ impl Notes {
     fn preferences(&self) {
         let save = || -> std::io::Result<()> {
             let mut bounds = self.bounds.clone();
+            if let Some(position) = self.input.0.lock().unwrap().position {
+                bounds.x = Some(position.x);
+                bounds.y = Some(position.y);
+            }
             if let Some(board) = &self.board {
                 bounds.folded = board.folded_keys();
             }
@@ -551,7 +603,7 @@ impl Notes {
                 let opening = matches!(action, pin::Message::Options(_));
                 let task = board.update(action).map(Message::Board);
                 if opening {
-                    board.anchor_options(self.pointer);
+                    board.anchor_options(self.input.0.lock().unwrap().pointer);
                 }
                 if board.revision != revision {
                     self.record(before, kind);
@@ -727,6 +779,7 @@ impl Notes {
                 let position = restored_position(point, legacy, scale, monitor, &self.bounds);
                 self.bounds.x = Some(position.x);
                 self.bounds.y = Some(position.y);
+                self.input.0.lock().unwrap().position = Some(position);
                 self.preferences();
                 let size = Size::new(self.bounds.width, self.bounds.height);
                 return Task::batch([
@@ -755,10 +808,14 @@ impl Notes {
                     return window::drag_resize(id, direction);
                 }
             }
-            Message::Pointer(p) => self.pointer = p,
+            Message::Pointer(p) => self.input.0.lock().unwrap().pointer = p,
             Message::Context(open) => {
                 let was_open = self.context.is_some();
-                self.context = if open { Some(self.pointer) } else { None };
+                self.context = if open {
+                    Some(self.input.0.lock().unwrap().pointer)
+                } else {
+                    None
+                };
                 self.menu_focus = (0..6).find(|&i| self.menu_action(i).is_some()).unwrap_or(4);
                 if open && self.board.is_some() {
                     return operation::focus("pin-context");
