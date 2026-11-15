@@ -225,7 +225,7 @@ fn shortcut(physical: Physical, modifiers: keyboard::Modifiers) -> Option<Messag
         Physical::Code(Code::KeyY) => Some(Message::Redo),
         Physical::Code(Code::KeyS) => Some(Message::Save),
         Physical::Code(Code::KeyM) if modifiers.shift() => Some(Message::TogglePreview),
-        Physical::Code(Code::KeyN) => Some(Message::Board(pin::Message::New(false))),
+        Physical::Code(Code::KeyN) => Some(Message::Board(pin::Message::New(modifiers.shift()))),
         _ => None,
     }
 }
@@ -331,26 +331,29 @@ impl Notes {
         self.content.perform(action);
         if let Some(before) = before {
             if before.text != self.content.text() {
-                self.record(before, kind);
+                self.record(Some(before), kind);
             }
         } else {
             self.group = None;
         }
     }
-    fn record(&mut self, before: Snapshot, kind: Option<Group>) {
-        let now = Instant::now();
-        if kind.is_none()
-            || !self.group.is_some_and(|(k, at)| {
-                Some(k) == kind && now.duration_since(at) < Duration::from_millis(600)
-            })
-        {
-            self.undo.push(before);
-            if self.undo.len() > 300 {
-                self.undo.remove(0);
+    fn starts_group(&self, kind: Option<Group>) -> bool {
+        kind.is_none()
+            || !self
+                .group
+                .is_some_and(|(k, at)| Some(k) == kind && at.elapsed() < Duration::from_millis(600))
+    }
+    fn record(&mut self, before: Option<Snapshot>, kind: Option<Group>) {
+        if let Some(before) = before {
+            if self.starts_group(kind) {
+                self.undo.push(before);
+                if self.undo.len() > 300 {
+                    self.undo.remove(0);
+                }
             }
         }
         self.redo.clear();
-        self.group = kind.map(|k| (k, now));
+        self.group = kind.map(|k| (k, Instant::now()));
         self.changed();
     }
     fn focus_editor(&self) -> Task<Message> {
@@ -528,8 +531,10 @@ impl Notes {
                 ) {
                     self.context = None;
                 }
-                let before = self.snapshot();
                 let kind = pin::State::group(&action);
+                let before = (self.board.as_ref().unwrap().changes_document(&action)
+                    && self.starts_group(kind))
+                .then(|| self.snapshot());
                 let board = self.board.as_mut().unwrap();
                 let revision = board.revision;
                 let opening = matches!(action, pin::Message::Options(_));
@@ -833,7 +838,7 @@ impl Notes {
                 let before = self.snapshot();
                 delete_word(&mut self.content, forward);
                 if self.content.text() != before.text {
-                    self.record(before, None);
+                    self.record(Some(before), None);
                 }
             }
 
@@ -1563,6 +1568,40 @@ mod tests {
     }
 
     #[test]
+    fn board_grouped_typing_selection_and_deletion_keep_exact_history() {
+        let initial = "- [ ] First\n- [ ] Other\n";
+        let mut n = note(initial);
+        n.board = Some(pin::State::new(initial, &[]));
+        let target = pin::Target::Item(1);
+        let edit = |a| Message::Board(pin::Message::Edit(target, a));
+        for ch in "Hello ".chars() {
+            let _ = n.update(edit(text_editor::Action::Edit(text_editor::Edit::Insert(
+                ch,
+            ))));
+        }
+        let typed = n.content.text();
+        let _ = n.update(Message::Undo);
+        assert_eq!(n.content.text(), initial);
+        let _ = n.update(Message::Redo);
+        assert_eq!(n.content.text(), typed);
+        let _ = n.update(edit(text_editor::Action::SelectAll));
+        let _ = n.update(edit(text_editor::Action::Edit(
+            text_editor::Edit::Backspace,
+        )));
+        assert_eq!(n.content.text(), "- [ ] \n- [ ] Other\n");
+        let _ = n.update(Message::Undo);
+        assert_eq!(n.content.text(), typed);
+        assert_eq!(
+            n.board.as_ref().unwrap().selection().as_deref(),
+            Some("Hello First")
+        );
+        let _ = n.update(Message::Board(pin::Message::Remove(1)));
+        let _ = n.update(edit(text_editor::Action::Move(text_editor::Motion::Left)));
+        let _ = n.update(Message::Undo);
+        assert_eq!(n.content.text(), typed);
+    }
+
+    #[test]
     fn word_delete_restores_original_caret_and_text_on_undo() {
         let mut n = note("سلام world");
         let cursor = n.content.cursor();
@@ -1620,6 +1659,15 @@ mod tests {
 
     #[test]
     fn shortcut_actions_use_physical_keys() {
+        for (modifiers, subtask) in [
+            (keyboard::Modifiers::CTRL, false),
+            (keyboard::Modifiers::CTRL | keyboard::Modifiers::SHIFT, true),
+        ] {
+            assert!(matches!(
+                shortcut(Physical::Code(Code::KeyN), modifiers),
+                Some(Message::Board(pin::Message::New(value))) if value == subtask
+            ));
+        }
         assert!(matches!(
             shortcut(Physical::Code(Code::KeyZ), keyboard::Modifiers::CTRL),
             Some(Message::Undo)

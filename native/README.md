@@ -30,7 +30,9 @@ changes; Ctrl+Shift+Z or Ctrl+Y redoes them. Ctrl+S saves immediately. The
 shortcuts use physical key positions so they work with English and Persian
 layouts. Typing is grouped by pauses; task actions are separate undo steps.
 
-Ctrl+N adds a task, Ctrl+T adds a subtask, Ctrl+Enter completes it, Ctrl+D opens
+Click a task's **+** to add its first subtask. The parent unfolds and the new
+subtask is ready to type. The tooltip shows its keyboard shortcut.
+Ctrl+N adds a task, Ctrl+Shift+N adds a subtask (Ctrl+T also works), Ctrl+Enter completes it, Ctrl+D opens
 its options, and Ctrl+Shift+Backspace deletes it. Enter splits a task, Tab and
 Shift+Tab change its level, and Alt+↑ / Alt+↓ reorder it. Only the grip starts
 a mouse drag, and the drop line shows its destination. Ctrl+Tab moves from a
