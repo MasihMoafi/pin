@@ -2,6 +2,7 @@
 import ctypes as c
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import select
@@ -110,6 +111,11 @@ def geometry(env, wid):
     return {k: int(v) for k, v in (line.split('=', 1) for line in x(env, 'getwindowgeometry', '--shell', wid).splitlines())}
 
 
+def cpu(pid):
+    fields = Path(f'/proc/{pid}/stat').read_text().rsplit(') ', 1)[1].split()
+    return sum(map(int, fields[11:13])) / os.sysconf('SC_CLK_TCK')
+
+
 results = []
 for scale in [1, 1.25, 2]:
     case = out / str(scale)
@@ -144,17 +150,39 @@ for scale in [1, 1.25, 2]:
 
         def record(name, action=None, seconds=1.2):
             watcher.clear()
+            display_pids = [int(pid) for pid in os.environ.get('PIN_DISPLAY_PIDS', '').split()]
+            before_cpu, before_display = cpu(p.pid), sum(cpu(pid) for pid in display_pids)
+            began = time.monotonic()
             if action:
                 action()
             events = watcher.read(seconds)
+            elapsed = time.monotonic() - began
             assert events, (name, scale, 'No display update observed')
             pixels = [r['width']*r['height'] for r in events]
-            entry['cases'][name] = dict(events=events, total_pixels=sum(pixels), max_pixels=max(pixels), max_window_fraction=max(pixels)/(g['WIDTH']*g['HEIGHT']))
+            entry['cases'][name] = dict(events=events, total_pixels=sum(pixels), max_pixels=max(pixels), max_window_fraction=max(pixels)/(g['WIDTH']*g['HEIGHT']), elapsed_s=elapsed, app_cpu_percent=100*(cpu(p.pid)-before_cpu)/elapsed, display_cpu_percent=100*(sum(cpu(pid) for pid in display_pids)-before_display)/elapsed)
             print(json.dumps(dict(scale=scale,case=name,events=len(events),max_window_fraction=entry['cases'][name]['max_window_fraction'])), flush=True)
 
         record('caret')
         record('typing', lambda: x(env, 'type', '--delay', 80, 'abcde'))
         record('hover', lambda: x(env, 'mousemove', '--window', wid, g['WIDTH']-round(100*scale), round(74*scale)))
+
+        def motion(kind):
+            gx, gy = g['X'], g['Y']
+            start = (gx+round(45*scale), gy+round(20*scale)) if kind == 'window' else (gx+g['WIDTH']-round(58*scale), gy+round(74*scale))
+            x(env, 'mousemove', *start, 'mousedown', 1)
+            began = time.monotonic()
+            try:
+                for step in range(60):
+                    point = (start[0]+round(20*scale*math.sin(step/10)), start[1]+round(10*scale*math.cos(step/10))) if kind == 'window' else (start[0], gy+round((74+(step%40)*3)*scale))
+                    x(env, 'mousemove', *point)
+                    time.sleep(max(0, began+(step+1)/60-time.monotonic()))
+            finally:
+                x(env, 'mousemove', 0, 0, 'mouseup', 1)
+                if kind == 'window':
+                    x(env, 'windowmove', wid, gx, gy)
+
+        record('window', lambda: motion('window'))
+        record('task', lambda: motion('task'))
         x(env, 'key', 'ctrl+s')
         deadline = time.monotonic() + 3
         while 'abcde' not in file.read_text():
@@ -187,7 +215,7 @@ for scale in [1, 1.25, 2]:
         results.append(entry)
         (out / 'results.json').write_text(json.dumps(dict(binary_sha256=hashlib.sha256(Path(binary).read_bytes()).hexdigest(), cases=results), indent=2))
         if not baseline:
-            assert all(case['max_window_fraction'] < .25 for case in entry['cases'].values()), entry
+            assert all(entry['cases'][name]['max_window_fraction'] < .25 for name in ['caret', 'typing', 'hover']), entry
     finally:
         if watcher:
             watcher.close()
