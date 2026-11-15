@@ -529,6 +529,13 @@ impl Notes {
         }
     }
     fn update(&mut self, message: Message) -> Task<Message> {
+        crate::x11::trace(match &message {
+            Message::FramePresented => "ack-message",
+            Message::Tick => "tick-message",
+            Message::Board(_) => "board-message",
+            Message::Window(_, _) => "window-message",
+            _ => "other-message",
+        });
         let message = match (&self.board, message) {
             (Some(_), Message::Copy(cut)) => Message::Board(pin::Message::Copy(cut)),
             (Some(_), Message::Paste) => Message::Board(pin::Message::Paste),

@@ -34,7 +34,7 @@ for scale in [1, 2]:
     file = case / 'Pin.md'
     file.write_text(''.join(f'- [ ] ==🟢Priority {i}: read a paper and explain the result.==\n' for i in range(20)))
     (config / 'iced.json').write_text(json.dumps(dict(width=1213, height=884, x=80, y=60, pinned=False)))
-    env = dict(os.environ, XDG_CONFIG_HOME=str(case / 'config'), PRIORITIES_FILE=str(file), WINIT_X11_SCALE_FACTOR=str(scale), GSETTINGS_BACKEND='keyfile')
+    env = dict(os.environ, XDG_CONFIG_HOME=str(case / 'config'), PRIORITIES_FILE=str(file), WINIT_X11_SCALE_FACTOR=str(scale), GSETTINGS_BACKEND='keyfile', PIN_TRACE='1')
     with (case / 'log').open('w') as log:
         p = subprocess.Popen([binary], env=env, stdout=log, stderr=log, start_new_session=True)
     try:

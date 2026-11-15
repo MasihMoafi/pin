@@ -4,6 +4,11 @@ on:
     branches: ['work/pin-speed-*']
     paths: ['.github/workflows/pin-idle.yml', 'native/test/idle.py']
   workflow_dispatch:
+    inputs:
+      binary_run_id:
+        description: Verified app artifact run
+        default: '43687825195'
+        required: true
 permissions:
   contents: read
   actions: read
@@ -15,8 +20,9 @@ jobs:
       - name: Download the verified app
         env:
           GH_TOKEN: ${{ github.token }}
+          PIN_BINARY_RUN: ${{ inputs.binary_run_id || '43687825195' }}
         run: |
-          gh run download 43687825195 -n pin-iced-linux -D app
+          gh run download "$PIN_BINARY_RUN" -n pin-iced-linux -D app
           chmod +x app/pin-iced
       - name: Install display dependencies
         run: |
