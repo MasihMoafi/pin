@@ -27,6 +27,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 - Pin is a lightweight task list: idle CPU stays near zero, and moving the window or a task must remain responsive without rebuilding unchanged content for each pointer position.
 - Measure background and active CPU, pointer/typing response time, and proportional memory (PSS). Compare identical task lists, window sizes and input traces on the same machine; report focused caret activity separately from background idle.
 - [native/test/responsiveness.py](native/test/responsiveness.py) owns repeatable baseline comparisons for typing, hover, window movement and task dragging. Its stress cases run only on GitHub Actions.
+- Small updates must remain partial through display presentation. [native/test/presentation.py](native/test/presentation.py) checks actual X11 damage and display-server CPU at 1×, 1.25× and 2×, including restore and resize; generated interaction cases run only on GitHub Actions.
 
 ## Tasks
 - Task text wraps and grows vertically at every window width; no line may be clipped.
