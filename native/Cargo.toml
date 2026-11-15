@@ -9,7 +9,7 @@ description = "Native floating priorities and scratch notes"
 default = ["desktop", "custom-protocol"]
 desktop = ["dep:gtk", "dep:tauri", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-clipboard-manager"]
 custom-protocol = ["tauri/custom-protocol"]
-iced-ui = ["dep:iced", "dep:image", "dep:unicode-segmentation", "dep:x11-dl", "dep:pulldown-cmark"]
+iced-ui = ["dep:iced", "dep:iced_tiny_skia", "dep:image", "dep:unicode-segmentation", "dep:x11-dl", "dep:pulldown-cmark"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
@@ -24,6 +24,7 @@ tauri-plugin-single-instance = { version = "2", optional = true }
 tauri-plugin-clipboard-manager = { version = "2", optional = true }
 
 iced = { version = "=0.14.0", optional = true, default-features = false, features = ["tiny-skia", "x11", "tokio", "svg", "linux-theme-detection", "crisp", "advanced", "markdown"] }
+iced_tiny_skia = { version = "0.14.1", optional = true, default-features = false }
 pulldown-cmark = { version = "0.12", optional = true, default-features = false }
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
 
@@ -32,9 +33,6 @@ x11-dl = { version = "2.21", optional = true }
 
 [build-dependencies]
 tauri-build = "2"
-
-[dev-dependencies]
-iced_tiny_skia = { version = "0.14.1", default-features = false }
 
 # 0.15.0's ASCII shaping fast path ignores emphasis inside Markdown delimiters.
 [patch.crates-io]

@@ -23,5 +23,10 @@ Presentation sends the damaged rectangles to softbuffer instead of copying
 the whole window to X11 after each small change. Rectangle edges round
 outward at the physical render scale and stay inside the buffer. Empty
 damage sends no image region; a new or resized buffer still presents in
-full. `../../test/presentation.py` checks actual XDamage events for caret,
+full. Native X11 exposure notifications request one full presentation from
+the retained client buffer after restoring or uncovering a window; until
+the app registers that handler, full presentation remains the default.
+Added and removed layers damage their content bounds instead of the entire
+viewport, so a tooltip stays a small update. `../../test/presentation.py`
+checks actual XDamage events for caret,
 typing and hover updates at 1×, 1.25× and 2×, plus minimize/restore and resize.

@@ -7,6 +7,17 @@ use crate::{Layer, Renderer, Settings};
 
 use std::collections::VecDeque;
 use std::num::NonZeroU32;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static EXPOSURES: AtomicU64 = AtomicU64::new(0);
+
+/// Invalidate retained window pixels after an X11 Expose event.
+///
+/// Call once after installing the Expose handler, then on every exposure.
+/// Until a handler opts in, presentation continues to copy full frames.
+pub fn window_exposed() {
+    let _ = EXPOSURES.fetch_add(1, Ordering::Release);
+}
 
 pub struct Compositor {
     context: softbuffer::Context<Box<dyn compositor::Display>>,
@@ -22,6 +33,7 @@ pub struct Surface {
     layer_stack: VecDeque<Vec<Layer>>,
     background_color: Color,
     max_age: u8,
+    exposure: u64,
 }
 
 impl crate::graphics::Compositor for Compositor {
@@ -73,6 +85,7 @@ impl crate::graphics::Compositor for Compositor {
             layer_stack: VecDeque::new(),
             background_color: Color::BLACK,
             max_age: 0,
+            exposure: 0,
         };
 
         if width > 0 && height > 0 {
@@ -179,7 +192,15 @@ pub fn present(
                 damage::diff(
                     last_layers,
                     renderer.layers(),
-                    |layer| vec![layer.bounds],
+                    |layer| {
+                        Layer::damage(
+                            &Layer {
+                                bounds: layer.bounds,
+                                ..Layer::default()
+                            },
+                            layer,
+                        )
+                    },
                     Layer::damage,
                 )
             })
@@ -213,6 +234,14 @@ pub fn present(
             background_color,
         );
     }
+
+    let exposure = EXPOSURES.load(Ordering::Acquire);
+    let damage = if exposure == 0 || surface.exposure != exposure {
+        vec![Rectangle::with_size(viewport.logical_size())]
+    } else {
+        damage
+    };
+    surface.exposure = exposure;
 
     on_pre_present();
     // Preserve the renderer's damage all the way to the display server. A
