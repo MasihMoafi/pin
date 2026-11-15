@@ -17,6 +17,7 @@ struct State {
     protocol: c_ulong,
     request: c_ulong,
     decode: Option<Decode>,
+    decode_expose: Option<Decode>,
     pending: Option<sync::XSyncValue>,
     drawn: Option<(Size, i32, u32)>,
 }
@@ -57,6 +58,29 @@ unsafe extern "C" fn decode(
 
 pub fn pending() -> bool {
     PENDING.load(Ordering::Acquire)
+}
+
+unsafe extern "C" fn decode_expose(
+    display: *mut xlib::Display,
+    event: *mut xlib::XEvent,
+    wire: *mut xlib::xEvent,
+) -> c_int {
+    STATE.with(|slot| {
+        let state = slot.borrow();
+        let Some(state) = state.as_ref() else {
+            return 0;
+        };
+        let result = state
+            .decode_expose
+            .map_or(0, |decode| unsafe { decode(display, event, wire) });
+        if result != 0
+            && unsafe { (*event).get_type() } == xlib::Expose
+            && unsafe { (*event).expose.window } == state.window
+        {
+            iced_tiny_skia::window::compositor::window_exposed();
+        }
+        result
+    })
 }
 
 /// Runs on the event-loop thread after Iced has presented the redraw that
@@ -179,6 +203,8 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
             }
             let previous =
                 unsafe { (xlib.XESetWireToEvent)(display, xlib::ClientMessage, Some(decode)) };
+            let previous_expose =
+                unsafe { (xlib.XESetWireToEvent)(display, xlib::Expose, Some(decode_expose)) };
             *state = Some(State {
                 xlib,
                 sync,
@@ -188,9 +214,11 @@ pub unsafe fn retain_contents(display: *mut c_void, window: c_ulong) {
                 protocol,
                 request,
                 decode: previous,
+                decode_expose: previous_expose,
                 pending: None,
                 drawn: None,
             });
+            iced_tiny_skia::window::compositor::window_exposed();
         }
         if let Some(state) = state.as_ref() {
             // All fields are X11 scalar values; only the two masked fields apply.
