@@ -38,6 +38,7 @@ tauri-build = "2"
 [patch.crates-io]
 cosmic-text = { git = "https://github.com/pop-os/cosmic-text", rev = "8cd21a315a7eee77fdbfb00e516fb1fe2bfbd4ab" }
 iced_tiny_skia = { path = "vendor/iced_tiny_skia" }
+iced_graphics = { path = "vendor/iced_graphics" }
 
 [[bin]]
 name = "pin-native"
