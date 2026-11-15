@@ -19,7 +19,12 @@ jobs:
           gh run download 43687825195 -n pin-iced-linux -D app
           chmod +x app/pin-iced
       - name: Install display dependencies
-        run: sudo apt-get install -y -qq xvfb openbox xdotool x11-utils python3-pil libxkbcommon-x11-0 fonts-inter fonts-noto-core
+        run: |
+          packages=(xvfb openbox xdotool x11-utils libxkbcommon-x11-0 fonts-inter fonts-noto-core)
+          sudo timeout 90 apt-get install -y -qq "${packages[@]}" || {
+            sudo timeout 90 apt-get update -qq
+            sudo timeout 120 apt-get install -y -qq "${packages[@]}"
+          }
       - name: Observe idle without generated input
         run: |
           Xvfb :99 -screen 0 3200x2400x24 -nolisten tcp &
