@@ -1,4 +1,4 @@
-use super::{bg, fg, focus_style, icon_button, icon_data, line, muted, Group};
+use super::{bg, drag, fg, focus_style, icon_button, icon_data, line, muted, Group};
 use crate::board::{valid_date, Board, Task as Item, COLORS};
 use chrono::{Datelike, Days, Local, Months, NaiveDate, NaiveDateTime};
 use iced::keyboard::{
@@ -81,8 +81,6 @@ pub enum Message {
     SelectAll,
     DeleteWord(Target, bool),
     Grip(u64),
-    Over(u64, bool),
-    Leave(u64),
     Drop,
     CancelDrag,
     Scroll(scrollable::Viewport),
@@ -147,8 +145,7 @@ pub struct State {
     next_id: u64,
     today: String,
     offset: scrollable::AbsoluteOffset,
-    dragging: Option<u64>,
-    drop: Option<(u64, bool)>,
+    drag: drag::Drag,
     pub revision: u64,
 }
 
@@ -181,8 +178,7 @@ impl State {
             next_id,
             today,
             offset: scrollable::AbsoluteOffset::default(),
-            dragging: None,
-            drop: None,
+            drag: drag::Drag::default(),
             revision: 0,
         }
     }
@@ -244,8 +240,7 @@ impl State {
         self.active = snapshot.active;
         self.options = snapshot.options;
         self.offset = snapshot.offset;
-        self.dragging = None;
-        self.drop = None;
+        self.drag.cancel();
         self.sync();
         Task::batch([
             self.focus(),
@@ -357,7 +352,7 @@ impl State {
                 .as_ref()
                 .and_then(|o| self.option_action(o.focus))
                 .is_some_and(|action| self.changes_document(&action)),
-            Message::Drop => self.dragging.is_some() && self.drop.is_some(),
+            Message::Drop => self.drag.source().is_some() && self.drag.target().is_some(),
             _ => false,
         }
     }
@@ -777,34 +772,17 @@ impl State {
                 }
             }
             Message::Grip(id) => {
-                self.dragging = Some(id);
-                self.drop = None;
-            }
-            Message::Over(target, after) => {
-                if let Some(source) = self.dragging {
-                    if let (Some(i), Some(j)) = (self.board.index(source), self.board.index(target))
-                    {
-                        self.drop =
-                            (!(i..self.board.end(i)).contains(&j)).then_some((target, after));
-                    }
-                }
-            }
-            Message::Leave(id) => {
-                if self.drop.is_some_and(|(target, _)| target == id) {
-                    self.drop = None;
-                }
+                self.drag.start(id);
             }
             Message::Drop => {
-                if let (Some(id), Some((target, after))) = (self.dragging.take(), self.drop.take())
-                {
+                if let (Some(id), Some((target, after))) = self.drag.take() {
                     if self.board.move_branch(id, target, after) {
                         self.revision += 1;
                     }
                 }
             }
             Message::CancelDrag => {
-                self.dragging = None;
-                self.drop = None;
+                self.drag.cancel();
             }
             Message::Scroll(v) => self.offset = v.absolute_offset(),
             Message::OptionsScroll(v) => {
@@ -844,6 +822,14 @@ impl State {
         if let Some(o) = &mut self.options {
             o.error = Some((value.into(), Instant::now()));
         }
+    }
+    fn can_drop(&self, target: u64) -> bool {
+        self.drag.source().is_some_and(|source| {
+            match (self.board.index(source), self.board.index(target)) {
+                (Some(i), Some(j)) => !(i..self.board.end(i)).contains(&j),
+                _ => false,
+            }
+        })
     }
     fn option_action(&self, focus: u8) -> Option<Message> {
         let o = self.options.as_ref()?;
@@ -1029,12 +1015,13 @@ impl State {
             .padding([7, 9])
             .on_press(Message::New(false))
             .style(super::ghost);
-        let mut footer = mouse_area(container(add).width(Fill).padding([2, 0]));
-        if self.dragging.is_some() {
-            footer = footer
-                .on_enter(last.map_or(Message::CancelDrag, |id| Message::Over(id, true)))
-                .on_exit(last.map_or(Message::CancelDrag, Message::Leave));
-        }
+        let footer = drag::target(
+            container(add).width(Fill).padding([2, 0]),
+            self.drag.clone(),
+            last.unwrap_or(0),
+            true,
+            last.is_some_and(|id| self.can_drop(id)),
+        );
         body = body.push(footer);
         let list = container(
             scrollable(body)
@@ -1237,24 +1224,24 @@ impl State {
             right: 4.,
         })
         .align_y(iced::Top);
-        let indicator = self.drop == Some((id, false));
+        let drag = self.drag.clone();
         let accent = container(space())
             .width(Fill)
             .height(2)
             .style(move |theme| {
-                container::Style::default().background(if indicator {
+                container::Style::default().background(if drag.target() == Some((id, false)) {
                     fg(theme)
                 } else {
                     Color::TRANSPARENT
                 })
             });
         let color = t.color.clone();
-        let after = self.drop == Some((id, true));
+        let drag = self.drag.clone();
         let bottom = container(space())
             .width(Fill)
             .height(2)
             .style(move |theme| {
-                container::Style::default().background(if after {
+                container::Style::default().background(if drag.target() == Some((id, true)) {
                     fg(theme)
                 } else {
                     Color::TRANSPARENT
@@ -1270,13 +1257,7 @@ impl State {
                 },
                 ..Default::default()
             });
-        let mut area = mouse_area(body);
-        if self.dragging.is_some() {
-            area = area
-                .on_enter(Message::Over(id, false))
-                .on_exit(Message::Leave(id));
-        }
-        area.into()
+        drag::target(body, self.drag.clone(), id, false, self.can_drop(id))
     }
     fn field(&self, target: Target, placeholder: &'static str) -> Element<'_, Message> {
         let content = self.editor(target).expect("option field");
@@ -1701,20 +1682,22 @@ mod tests {
     fn drag_requires_a_grip_and_cancels_outside_or_on_a_descendant() {
         let mut s = State::new("- [ ] Parent\n  - [ ] Child\n- [ ] Last\n", &[]);
         let original = s.markdown();
-        let _ = s.update(Message::Over(3, true));
+        s.drag.over(3, true);
         let _ = s.update(Message::Drop);
         assert_eq!(s.markdown(), original);
         let _ = s.update(Message::Grip(1));
-        let _ = s.update(Message::Over(2, false));
+        assert!(!s.can_drop(2));
+        s.drag.over(2, false);
         let _ = s.update(Message::Drop);
         assert_eq!(s.markdown(), original);
         let _ = s.update(Message::Grip(1));
-        let _ = s.update(Message::Over(3, true));
+        s.drag.over(3, true);
         let _ = s.update(Message::CancelDrag);
         let _ = s.update(Message::Drop);
         assert_eq!(s.markdown(), original);
         let _ = s.update(Message::Grip(1));
-        let _ = s.update(Message::Over(3, true));
+        assert!(s.can_drop(3));
+        s.drag.over(3, true);
         let _ = s.update(Message::Drop);
         assert_eq!(s.board.tasks[0].text, "Last");
         assert_eq!(s.board.tasks[2].text, "Child");
