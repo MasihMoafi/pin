@@ -224,8 +224,12 @@ pub fn present(
             let bounds = bounds * viewport.scale_factor();
             let x = bounds.x.floor().max(0.0) as u32;
             let y = bounds.y.floor().max(0.0) as u32;
-            let right = bounds.right().ceil().min(physical_size.width as f32) as u32;
-            let bottom = bounds.bottom().ceil().min(physical_size.height as f32) as u32;
+            let right = (bounds.x + bounds.width)
+                .ceil()
+                .min(physical_size.width as f32) as u32;
+            let bottom = (bounds.y + bounds.height)
+                .ceil()
+                .min(physical_size.height as f32) as u32;
             Some(softbuffer::Rect {
                 x,
                 y,
