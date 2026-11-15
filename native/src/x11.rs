@@ -4,11 +4,6 @@ use iced::{mouse, Element, Fill, Length, Rectangle, Renderer, Size, Theme};
 use std::cell::RefCell;
 use std::ffi::{c_int, c_ulong, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::{
-    collections::BTreeMap,
-    sync::{LazyLock, Mutex},
-    time::Instant,
-};
 use x11_dl::{sync, xlib};
 
 type Decode =
@@ -27,30 +22,6 @@ struct State {
 }
 thread_local! { static STATE: RefCell<Option<State>> = const { RefCell::new(None) }; }
 static PENDING: AtomicBool = AtomicBool::new(false);
-
-pub fn trace(tag: &'static str) {
-    struct Trace {
-        since: Instant,
-        counts: BTreeMap<&'static str, u64>,
-    }
-    static TRACE: LazyLock<Option<Mutex<Trace>>> = LazyLock::new(|| {
-        std::env::var_os("PIN_TRACE").map(|_| {
-            Mutex::new(Trace {
-                since: Instant::now(),
-                counts: BTreeMap::new(),
-            })
-        })
-    });
-    if let Some(trace) = TRACE.as_ref() {
-        let mut trace = trace.lock().unwrap();
-        *trace.counts.entry(tag).or_default() += 1;
-        if tag == "draw" && trace.since.elapsed().as_secs() >= 1 {
-            eprintln!("Pin trace {:?}", trace.counts);
-            trace.counts.clear();
-            trace.since = Instant::now();
-        }
-    }
-}
 
 // Xlib calls this on the event-loop thread, before winit discards unknown
 // ClientMessages. Preserve its normal decoder for keyboard, focus and close.
@@ -91,25 +62,14 @@ pub fn pending() -> bool {
 /// Runs on the event-loop thread after Iced has presented the redraw that
 /// emitted RedrawRequested. X11 drawing and counter updates share a connection.
 pub fn frame_presented(scale: f32) {
-    trace("ack-callback");
     // Xlib may decode a newer resize request while waiting for this reply.
     // Keep the connection query outside the STATE borrow.
     let query = STATE.with(|slot| {
         let state = slot.borrow();
-        let Some(state) = state.as_ref() else {
-            trace("ack-no-state");
-            return None;
-        };
-        let Some(value) = state.pending.as_ref() else {
-            trace("ack-no-pending");
-            return None;
-        };
-        let Some((size, drawn_hi, drawn_lo)) = state.drawn else {
-            trace("ack-no-draw");
-            return None;
-        };
+        let state = state.as_ref()?;
+        let value = state.pending.as_ref()?;
+        let (size, drawn_hi, drawn_lo) = state.drawn?;
         if (value.hi, value.lo) != (drawn_hi, drawn_lo) {
-            trace("ack-stale-draw");
             return None;
         }
         Some((
@@ -141,7 +101,6 @@ pub fn frame_presented(scale: f32) {
         )
     };
     if exists == 0 || (width, height) != (current_width, current_height) {
-        trace("ack-size-mismatch");
         return;
     }
     let ack = STATE.with(|slot| {
@@ -272,16 +231,12 @@ pub fn frame<'a, Message: 'a>() -> Element<'a, Message> {
             _: mouse::Cursor,
             _: &Rectangle,
         ) {
-            trace("draw");
             STATE.with(|slot| {
                 if let Some(state) = slot.borrow_mut().as_mut() {
-                    trace("draw-has-state");
                     state.drawn = state
                         .pending
                         .as_ref()
                         .map(|value| (layout.bounds().size(), value.hi, value.lo));
-                } else {
-                    trace("draw-no-state");
                 }
             });
         }

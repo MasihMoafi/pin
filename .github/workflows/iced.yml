@@ -102,6 +102,7 @@ jobs:
           ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/pin_iced.py baseline/pin-native native/target/release/pin-iced iced-results/pin-scale2
           dbus-run-session -- /usr/bin/python3 -I native/test/iced.py baseline/pin-native native/target/release/notes-iced iced-results/scale1
           ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/iced.py baseline/pin-native native/target/release/notes-iced iced-results/scale2
+          dbus-run-session -- /usr/bin/python3 -I native/test/idle.py native/target/release/pin-iced iced-results/idle
       - uses: actions/upload-artifact@v4
         if: always()
         with:

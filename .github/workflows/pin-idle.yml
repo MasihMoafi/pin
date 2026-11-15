@@ -1,13 +1,9 @@
 name: Native Pin idle at desktop scales
 on:
-  push:
-    branches: ['work/pin-speed-*']
-    paths: ['.github/workflows/pin-idle.yml', 'native/test/idle.py']
   workflow_dispatch:
     inputs:
       binary_run_id:
         description: Verified app artifact run
-        default: '43687825195'
         required: true
 permissions:
   contents: read
@@ -20,7 +16,7 @@ jobs:
       - name: Download the verified app
         env:
           GH_TOKEN: ${{ github.token }}
-          PIN_BINARY_RUN: ${{ inputs.binary_run_id || '43687825195' }}
+          PIN_BINARY_RUN: ${{ inputs.binary_run_id }}
         run: |
           gh run download "$PIN_BINARY_RUN" -n pin-iced-linux -D app
           chmod +x app/pin-iced
