@@ -52,7 +52,7 @@ def physical_n(shift=False):
         xtest.XTestFakeKeyEvent(display, key, on, 0)
     lib.XSync(display, 0)
 
-for label in ['mouse', 'keyboard', 'nested']:
+for label in ['mouse', 'keyboard', 'nested', 'drag']:
     case = out / label
     config = case / 'config/Pin'
     config.mkdir(parents=True, exist_ok=True)
@@ -128,6 +128,30 @@ for label in ['mouse', 'keyboard', 'nested']:
             saved(blank)
             shot('keyboard-child')
             checks.append('Physical Ctrl+N and Ctrl+Shift+N work in English/Persian; legacy Ctrl+T still adds a subtask')
+        elif label == 'drag':
+            picture = shot('initial')
+            rows = boxes(picture, scale)
+            _, top, _, bottom = rows[-1]
+            x('mousemove', '--window', wid, 402*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            time.sleep(.15)
+            x('mousemove', '--window', wid, 150*scale, (top+bottom)//2)
+            time.sleep(.15)
+            shot('before-final-task')
+            x('mouseup', 1)
+            moved = '- [ ] ==🟢Target parent==\n  - [ ] ==🔵Older child==\n- [ ] Other parent\n- [ ] Last parent\n'
+            saved(moved)
+            x('key', 'ctrl+z')
+            saved(initial)
+            x('mousemove', '--window', wid, 402*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            time.sleep(.15)
+            x('mousemove', '--window', wid, 150*scale, bottom+30*scale)
+            time.sleep(.15)
+            shot('after-final-task')
+            x('mouseup', 1)
+            saved('- [ ] ==🟢Target parent==\n  - [ ] ==🔵Older child==\n- [ ] Last parent\n- [ ] Other parent\n')
+            x('key', 'ctrl+z')
+            saved(initial)
+            checks.append('Drops before the final task and after the list stay distinct, preserve branches, and undo exactly')
         else:
             click_row(1, 120)
             x('key', 'ctrl+period')

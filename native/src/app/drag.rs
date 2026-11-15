@@ -32,8 +32,8 @@ impl Drag {
             ..self.0.get()
         });
     }
-    pub fn leave(&self, target: u64) {
-        if self.target().is_some_and(|(id, _)| id == target) {
+    fn leave(&self, target: u64, after: bool) {
+        if self.target() == Some((target, after)) {
             self.0.set(Position {
                 target: None,
                 ..self.0.get()
@@ -132,7 +132,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Target<'_, Message> {
             if self.enabled && cursor.is_over(layout.bounds()) && cursor.is_over(*viewport) {
                 self.drag.over(self.id, self.after);
             } else {
-                self.drag.leave(self.id);
+                self.drag.leave(self.id, self.after);
             }
             if before != self.drag.target() {
                 shell.request_redraw();
