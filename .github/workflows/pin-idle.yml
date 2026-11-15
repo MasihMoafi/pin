@@ -19,7 +19,9 @@ jobs:
           PIN_BINARY_RUN: ${{ inputs.binary_run_id }}
         run: |
           gh run download "$PIN_BINARY_RUN" -n pin-iced-linux -D app
+          gh run download 43687825195 -n pin-iced-linux -D baseline
           chmod +x app/pin-iced
+          chmod +x baseline/pin-iced
       - name: Install display dependencies
         run: |
           packages=(xvfb openbox xdotool x11-utils libxkbcommon-x11-0 fonts-inter fonts-noto-core)
@@ -44,9 +46,12 @@ jobs:
             xprop -root _NET_SUPPORTING_WM_CHECK | rg -q 'window id #' && break
             sleep .1
           done
+          dbus-run-session -- /usr/bin/python3 -I native/test/idle.py baseline/pin-iced idle-baseline --baseline
           dbus-run-session -- /usr/bin/python3 -I native/test/idle.py app/pin-iced idle-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pin-idle
-          path: idle-results
+          path: |
+            idle-results
+            idle-baseline
