@@ -4,6 +4,11 @@ on:
     branches: [work/iced-notes, work/iced-pin, work/iced-pin-integrated, work/recording-fixes-20261110, 'work/notes-markdown-*', 'work/pin-speed-*']
     paths: ['native/**', '.github/workflows/iced.yml']
   workflow_dispatch:
+    inputs:
+      task_actions_only:
+        description: Run task action and performance checks
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -59,6 +64,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run download 43692770691 -n pin-iced-linux -D presentation-baseline
       - name: Verify and compare real native apps on a hidden display
+        env:
+          PIN_TASK_ACTIONS_ONLY: ${{ inputs.task_actions_only || 'false' }}
         run: |
           Xvfb :99 -screen 0 3200x2400x24 -nolisten tcp &
           iced_display_pid=$!
@@ -99,6 +106,9 @@ jobs:
           PY
           dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks
           ICED_TEST_SCALE=2 dbus-run-session -- /usr/bin/python3 -I native/test/subtasks.py native/target/release/pin-iced iced-results/subtasks-scale2
+          if [[ "$PIN_TASK_ACTIONS_ONLY" == true ]]; then
+            exit 0
+          fi
           chmod +x pin-baseline/pin-iced
           dbus-run-session -- /usr/bin/python3 -I native/test/responsiveness.py pin-baseline/pin-iced iced-results/responsiveness-baseline
           dbus-run-session -- /usr/bin/python3 -I native/test/responsiveness.py native/target/release/pin-iced iced-results/responsiveness-revised

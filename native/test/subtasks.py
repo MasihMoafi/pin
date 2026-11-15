@@ -46,13 +46,16 @@ display = lib.XOpenDisplay(env['DISPLAY'].encode())
 assert display
 subprocess.run(['setxkbmap', '-layout', 'us,ir'], env=env, check=True)
 
-def physical_n(shift=False):
-    events = [(37, 1)] + ([(50, 1)] if shift else []) + [(57, 1), (57, 0)] + ([(50, 0)] if shift else []) + [(37, 0)]
+def physical_key(code, shift=False):
+    events = [(37, 1)] + ([(50, 1)] if shift else []) + [(code, 1), (code, 0)] + ([(50, 0)] if shift else []) + [(37, 0)]
     for key, on in events:
         xtest.XTestFakeKeyEvent(display, key, on, 0)
     lib.XSync(display, 0)
 
-for label in ['mouse', 'keyboard', 'nested', 'drag']:
+def physical_n(shift=False):
+    physical_key(57, shift)
+
+for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
     case = out / label
     config = case / 'config/Pin'
     config.mkdir(parents=True, exist_ok=True)
@@ -128,6 +131,67 @@ for label in ['mouse', 'keyboard', 'nested', 'drag']:
             saved(blank)
             shot('keyboard-child')
             checks.append('Physical Ctrl+N and Ctrl+Shift+N work in English/Persian; legacy Ctrl+T still adds a subtask')
+        elif label == 'delete':
+            branch_removed = '- [ ] Other parent\n- [ ] Last parent\n'
+            leaf_removed = initial.replace('  - [ ] ==🔵Older child==\n', '')
+            last = '- [ ] Last parent\n'
+            for layout in [0, 1]:
+                lib.XkbLockGroup(display, 256, layout)
+                lib.XSync(display, 0)
+                # Delete another row's whole branch, then click elsewhere.
+                click_row(0, 120)
+                click_row(1, 340)
+                saved(branch_removed)
+                click_row(0, 120)
+                physical_key(52)
+                saved(initial)
+                physical_key(29)
+                saved(branch_removed)
+                physical_key(52)
+                saved(initial)
+                physical_key(52, True)
+                saved(branch_removed)
+                physical_key(52)
+                saved(initial)
+                # A leaf removes only itself; both redo keys preserve siblings.
+                click_row(2, 340)
+                saved(leaf_removed)
+                physical_key(52)
+                saved(initial)
+                physical_key(29)
+                saved(leaf_removed)
+                physical_key(52)
+                saved(initial)
+                physical_key(52, True)
+                saved(leaf_removed)
+                physical_key(52)
+                saved(initial)
+                # The final row can be removed and restored from the empty state.
+                click_row(1, 340)
+                saved(branch_removed)
+                click_row(0, 340)
+                saved(last)
+                click_row(0, 340)
+                wait(lambda: not file.read_text().strip(), 'Final task deletion')
+                empty = file.read_text()
+                physical_key(52)
+                saved(last)
+                physical_key(29)
+                saved(empty)
+                physical_key(52)
+                saved(last)
+                physical_key(52, True)
+                saved(empty)
+                physical_key(52)
+                saved(last)
+                physical_key(52)
+                saved(branch_removed)
+                physical_key(52)
+                saved(initial)
+            lib.XkbLockGroup(display, 256, 0)
+            lib.XSync(display, 0)
+            shot('row-delete')
+            checks.append('Row trash deletes its own leaf, branch or final task; Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z preserve exact contents in English/Persian, including after clicking elsewhere')
         elif label == 'drag':
             picture = shot('initial')
             rows = boxes(picture, scale)

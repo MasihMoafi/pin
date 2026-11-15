@@ -1167,6 +1167,17 @@ impl State {
             false,
         )
         .map(move |_| Message::AddSubtask(id));
+        let delete = icon_button(
+            if child {
+                "Delete task and subtasks (Ctrl+Shift+Backspace)"
+            } else {
+                "Delete task (Ctrl+Shift+Backspace)"
+            },
+            "trash",
+            Some(super::Message::Board(Message::Remove(id))),
+            false,
+        )
+        .map(move |_| Message::Remove(id));
         let check = checkbox(t.done)
             .size(17)
             .on_toggle(move |_| Message::Toggle(id))
@@ -1208,6 +1219,9 @@ impl State {
                     ..Default::default()
                 }),
             container(content).width(Fill),
+            container(delete)
+                .height(CONTROL_HEIGHT)
+                .align_y(iced::Center),
             container(subtask)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center),
