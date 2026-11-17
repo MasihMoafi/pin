@@ -95,7 +95,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
         if label == 'mouse':
             # Focus one parent, then click another parent's plus.
             click_row(0, 120)
-            click_row(1, 371)
+            click_row(1, 400)
             x('type', '--clearmodifiers', 'From plus')
             expected = initial.replace('  - [ ] ==🔵Older child==', '  - [ ] ==🟢From plus==\n  - [ ] ==🔵Older child==')
             saved(expected)
@@ -140,7 +140,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
                 lib.XSync(display, 0)
                 # Delete another row's whole branch, then click elsewhere.
                 click_row(0, 120)
-                click_row(1, 340)
+                click_row(1, 369)
                 saved(branch_removed)
                 click_row(0, 120)
                 physical_key(52)
@@ -154,7 +154,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
                 physical_key(52)
                 saved(initial)
                 # A leaf removes only itself; both redo keys preserve siblings.
-                click_row(2, 340)
+                click_row(2, 369)
                 saved(leaf_removed)
                 physical_key(52)
                 saved(initial)
@@ -167,11 +167,11 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
                 physical_key(52)
                 saved(initial)
                 # The final row can be removed and restored from the empty state.
-                click_row(1, 340)
+                click_row(1, 369)
                 saved(branch_removed)
-                click_row(0, 340)
+                click_row(0, 369)
                 saved(last)
-                click_row(0, 340)
+                click_row(0, 369)
                 wait(lambda: not file.read_text().strip(), 'Final task deletion')
                 empty = file.read_text()
                 physical_key(52)
@@ -196,7 +196,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             picture = shot('initial')
             rows = boxes(picture, scale)
             _, top, _, bottom = rows[-1]
-            x('mousemove', '--window', wid, 402*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            x('mousemove', '--window', wid, 20*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
             time.sleep(.15)
             x('mousemove', '--window', wid, 150*scale, (top+bottom)//2)
             time.sleep(.15)
@@ -206,7 +206,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             saved(moved)
             x('key', 'ctrl+z')
             saved(initial)
-            x('mousemove', '--window', wid, 402*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            x('mousemove', '--window', wid, 20*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
             time.sleep(.15)
             x('mousemove', '--window', wid, 150*scale, bottom+30*scale)
             time.sleep(.15)
@@ -220,7 +220,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             click_row(1, 120)
             x('key', 'ctrl+period')
             time.sleep(.2)
-            click_row(1, 371)
+            click_row(1, 400)
             x('type', '--clearmodifiers', 'Unfolded child')
             expected = initial.replace('  - [ ] ==🔵Older child==', '  - [ ] ==🟢Unfolded child==\n  - [ ] ==🔵Older child==')
             saved(expected)

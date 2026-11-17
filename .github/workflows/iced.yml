@@ -117,7 +117,7 @@ jobs:
           fi
           chmod +x pin-baseline/pin-iced
           dbus-run-session -- /usr/bin/python3 -I native/test/responsiveness.py pin-baseline/pin-iced iced-results/responsiveness-baseline
-          dbus-run-session -- /usr/bin/python3 -I native/test/responsiveness.py native/target/release/pin-iced iced-results/responsiveness-revised
+          dbus-run-session -- /usr/bin/python3 -I native/test/responsiveness.py native/target/release/pin-iced iced-results/responsiveness-revised --left-handle
           /usr/bin/python3 - <<'PY'
           import json
           from pathlib import Path

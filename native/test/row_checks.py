@@ -5,7 +5,7 @@ def checkboxes(picture, scale, dark=False):
     outline = (161, 161, 170) if dark else (116, 116, 124)
     pixels = picture.convert('RGB').load()
     candidates = {(x, y) for y in range(50 * scale, picture.height)
-                  for x in range(30 * scale, min(100 * scale, picture.width))
+                  for x in range(30 * scale, min(150 * scale, picture.width))
                   if max(abs(a - b) for a, b in zip(pixels[x, y], outline)) < 80}
     boxes = []
     while candidates:
@@ -33,9 +33,9 @@ def alignment(picture, scale, boxes, dark=False):
     for left, top, right, bottom in boxes:
         center = (top + bottom - 1) / 2
         grip = [(x, y) for y in range(top - 3 * scale, bottom + 3 * scale)
-                for x in range(picture.width - 80 * scale, picture.width - 20 * scale)
+                for x in range(max(0, left - 57 * scale), left - 35 * scale)
                 if max(abs(a - b) for a, b in zip(pixels[x, y], outline)) < 20]
-        assert grip, 'Drag handle must remain visible'
+        assert grip, 'Drag handle must remain visible to the left of the checkbox and text'
         grip_center = (min(y for _, y in grip) + max(y for _, y in grip)) / 2
         text_x = [x for y in range(top, bottom) for x in range(right, right + 30 * scale)
                   if (min(pixels[x, y]) > 210 if dark else max(pixels[x, y]) < 80)]

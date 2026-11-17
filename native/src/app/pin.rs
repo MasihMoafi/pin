@@ -1208,6 +1208,7 @@ impl State {
                 }
             });
         let row = row![
+            container(grip).height(CONTROL_HEIGHT).align_y(iced::Center),
             container(chevron)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center),
@@ -1225,7 +1226,6 @@ impl State {
             container(subtask)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center),
-            container(grip).height(CONTROL_HEIGHT).align_y(iced::Center),
             container(options)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center)

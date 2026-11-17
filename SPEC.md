@@ -31,6 +31,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 
 ## Tasks
 - Task text wraps and grows vertically at every window width; no line may be clipped.
+- Each task and subtask has its drag handle at the left, before the checkbox and text. Dragging text selects it; dragging the handle moves the task with its children.
 - The task options offer daily recurrence; completed daily tasks reopen on the next local date, preserving any time.
 - Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
   Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
