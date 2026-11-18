@@ -339,7 +339,7 @@ try:
     check('Both conflict choices protect local typing and idle reload uses the external list')
     drag_list = '- [ ] ==🟢Alpha==\n- [ ] ==🔵Beta==\n- [ ] ==🟣Gamma==\n'
     p, wid, file, _ = start('drag', drag_list)
-    x('mousemove', '--window', wid, 20 * scale, 75 * scale, 'mousedown', '1')
+    x('mousemove', '--window', wid, 54 * scale, 75 * scale, 'mousedown', '1')
     time.sleep(.15)
     x('mousemove', '--window', wid, 150 * scale, 210 * scale)
     time.sleep(.3)
@@ -348,7 +348,7 @@ try:
     saved('- [ ] ==🔵Beta==\n- [ ] ==🟣Gamma==\n- [ ] ==🟢Alpha==\n')
     physical(52)
     saved(drag_list)
-    x('mousemove', '--window', wid, 20 * scale, 75 * scale, 'mousedown', '1')
+    x('mousemove', '--window', wid, 54 * scale, 75 * scale, 'mousedown', '1')
     time.sleep(.15)
     x('mousemove', 1, 1)
     x('mouseup', '1')

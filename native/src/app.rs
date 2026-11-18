@@ -1351,7 +1351,7 @@ fn icon_data(name: &str) -> &'static [u8] {
     match name {
         "plus" => include_bytes!("../icons/plus.svg"),
         "trash" => include_bytes!("../icons/trash-2.svg"),
-        "grip" => include_bytes!("../icons/grip-vertical.svg"),
+        "grip" => include_bytes!("../icons/grip.svg"),
         "more" => include_bytes!("../icons/ellipsis.svg"),
         "down" => include_bytes!("../icons/chevron-down.svg"),
         "right" => include_bytes!("../icons/chevron-right.svg"),

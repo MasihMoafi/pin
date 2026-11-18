@@ -196,7 +196,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             picture = shot('initial')
             rows = boxes(picture, scale)
             _, top, _, bottom = rows[-1]
-            x('mousemove', '--window', wid, 20*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            x('mousemove', '--window', wid, 54*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
             time.sleep(.15)
             x('mousemove', '--window', wid, 150*scale, (top+bottom)//2)
             time.sleep(.15)
@@ -206,7 +206,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             saved(moved)
             x('key', 'ctrl+z')
             saved(initial)
-            x('mousemove', '--window', wid, 20*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            x('mousemove', '--window', wid, 54*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
             time.sleep(.15)
             x('mousemove', '--window', wid, 150*scale, bottom+30*scale)
             time.sleep(.15)

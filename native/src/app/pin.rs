@@ -1143,8 +1143,8 @@ impl State {
         let grip = mouse_area(
             container(
                 svg(svg::Handle::from_memory(icon_data("grip")))
-                    .width(14)
-                    .height(14)
+                    .width(15)
+                    .height(15)
                     .style(|theme, _| svg::Style {
                         color: Some(muted(theme)),
                     }),
@@ -1208,10 +1208,10 @@ impl State {
                 }
             });
         let row = row![
-            container(grip).height(CONTROL_HEIGHT).align_y(iced::Center),
             container(chevron)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center),
+            container(grip).height(CONTROL_HEIGHT).align_y(iced::Center),
             container(check)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center)

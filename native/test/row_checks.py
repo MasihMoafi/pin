@@ -33,7 +33,7 @@ def alignment(picture, scale, boxes, dark=False):
     for left, top, right, bottom in boxes:
         center = (top + bottom - 1) / 2
         grip = [(x, y) for y in range(top - 3 * scale, bottom + 3 * scale)
-                for x in range(max(0, left - 57 * scale), left - 35 * scale)
+                for x in range(max(0, left - 32 * scale), max(0, left - 4 * scale))
                 if max(abs(a - b) for a, b in zip(pixels[x, y], outline)) < 20]
         assert grip, 'Drag handle must remain visible to the left of the checkbox and text'
         grip_center = (min(y for _, y in grip) + max(y for _, y in grip)) / 2
