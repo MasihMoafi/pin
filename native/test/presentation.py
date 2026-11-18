@@ -168,7 +168,7 @@ for scale in [1, 1.25, 2]:
 
         def motion(kind):
             gx, gy = g['X'], g['Y']
-            grip_x = g['WIDTH']-round(58*scale) if baseline else round(54*scale)
+            grip_x = g['WIDTH']-round(58*scale) if baseline else round(23*scale)
             start = (gx+round(45*scale), gy+round(20*scale)) if kind == 'window' else (gx+grip_x, gy+round(74*scale))
             x(env, 'mousemove', *start, 'mousedown', 1)
             began = time.monotonic()

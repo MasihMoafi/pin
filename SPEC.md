@@ -38,8 +38,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 - Each row has a checkbox, text, a trash button immediately left of + (add subtask), and ⋯ (daily recurrence, color, date, subtask, delete). Trash removes that row and its subtasks; Ctrl+Z restores them exactly and Ctrl+Y / Ctrl+Shift+Z redo the removal. The + adds a child to that row even when another task has focus, unfolds its parent, and focuses the child. Options open as dropdown menus over the list; dates use a month calendar and times use hour/minute dropdowns, as in the earlier calendar UI.
 - Checkboxes have a clear gap before the text; chevrons, checkboxes and trailing controls share the center of the first text line, including wrapped tasks. Separate rows have visible space between them.
 - Unchecked shadcn checkboxes keep a solid background and an outline with at least 3:1 contrast against task colors in light and dark themes.
-- A new subtask goes first under its task (8 Nov). A task with subtasks has a chevron in the left gutter that folds them
-  away (also Ctrl+.); the folded tasks are remembered on this computer, never written to the file.
+- A new subtask goes first under its task. On parents, a chevron between the checkbox and title folds or unfolds the branch (also Ctrl+.). Leaves use that space for their title. Pin remembers folded branches on this computer.
 - Hotkeys: Ctrl+N task, Ctrl+Shift+N subtask (Ctrl+T also works), Ctrl+D date, Ctrl+Shift+Backspace delete, Ctrl+Enter done, Alt+↑/↓ move;
   Enter splits at the caret; Tab / Shift+Tab nest and lift; Backspace on an empty task deletes it.
 - The task options offer twelve colors plus any custom color. A new task takes its neighbor's color.

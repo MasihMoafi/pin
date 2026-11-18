@@ -196,7 +196,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             picture = shot('initial')
             rows = boxes(picture, scale)
             _, top, _, bottom = rows[-1]
-            x('mousemove', '--window', wid, 54*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            x('mousemove', '--window', wid, 23*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
             time.sleep(.15)
             x('mousemove', '--window', wid, 150*scale, (top+bottom)//2)
             time.sleep(.15)
@@ -206,7 +206,7 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             saved(moved)
             x('key', 'ctrl+z')
             saved(initial)
-            x('mousemove', '--window', wid, 54*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
+            x('mousemove', '--window', wid, 23*scale, (rows[0][1]+rows[0][3])//2, 'mousedown', 1)
             time.sleep(.15)
             x('mousemove', '--window', wid, 150*scale, bottom+30*scale)
             time.sleep(.15)
@@ -217,9 +217,12 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             saved(initial)
             checks.append('Drops before the final task and after the list stay distinct, preserve branches, and undo exactly')
         else:
-            click_row(1, 120)
-            x('key', 'ctrl+period')
-            time.sleep(.2)
+            rows = boxes(shot('expanded'), scale)
+            assert len(rows) == 4 and rows[0][0] == rows[1][0], rows
+            assert rows[0][0] < 50 * scale, ('Empty gutter before the grip', rows[0])
+            click_row(1, rows[1][2] // scale + 18)
+            assert len(boxes(shot('folded'), scale)) == 3, 'Clicking beside the parent title folds its child'
+            saved(initial)
             click_row(1, 400)
             x('type', '--clearmodifiers', 'Unfolded child')
             expected = initial.replace('  - [ ] ==🔵Older child==', '  - [ ] ==🟢Unfolded child==\n  - [ ] ==🔵Older child==')

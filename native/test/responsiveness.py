@@ -41,7 +41,7 @@ def movement(wid, pid, kind):
     if kind == 'window':
         start = (gx + 45, gy + 20)
     elif kind == 'task':
-        start = (gx + (54 if '--left-handle' in sys.argv[3:] else width - 58), gy + 74)
+        start = (gx + (23 if '--left-handle' in sys.argv[3:] else width - 58), gy + 74)
     else:
         start = (gx + 140, gy + 74)
     x('windowfocus', wid, 'mousemove', *start)

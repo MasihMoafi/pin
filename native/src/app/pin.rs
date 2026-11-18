@@ -1081,24 +1081,6 @@ impl State {
     fn task_view<'a>(&'a self, i: usize, t: &'a Item) -> Element<'a, Message> {
         let id = t.id;
         let child = self.board.end(i) > i + 1;
-        let chevron: Element<'_, Message> = if child {
-            icon_button(
-                "Fold / unfold (Ctrl+.)",
-                if self.folded.contains(&id) {
-                    "right"
-                } else {
-                    "down"
-                },
-                Some(super::Message::Board(Message::Fold(id))),
-                false,
-            )
-            .map(move |m| match m {
-                super::Message::Board(m) => m,
-                _ => Message::Fold(id),
-            })
-        } else {
-            space().width(26).into()
-        };
         let editor = text_editor(&self.editors[&id])
             .id(Target::Item(id).id())
             .on_action(move |a| Message::Edit(Target::Item(id), a))
@@ -1207,37 +1189,59 @@ impl State {
                     text_color: None,
                 }
             });
-        let row = row![
-            container(chevron)
-                .height(CONTROL_HEIGHT)
-                .align_y(iced::Center),
+        let mut row = row![
             container(grip).height(CONTROL_HEIGHT).align_y(iced::Center),
             container(check)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center)
                 .padding(iced::Padding {
-                    right: 5.,
+                    right: if child { 0. } else { 5. },
                     ..Default::default()
-                }),
-            container(content).width(Fill),
-            container(delete)
-                .height(CONTROL_HEIGHT)
-                .align_y(iced::Center),
-            container(subtask)
-                .height(CONTROL_HEIGHT)
-                .align_y(iced::Center),
-            container(options)
-                .height(CONTROL_HEIGHT)
-                .align_y(iced::Center)
-        ]
-        .spacing(5)
-        .padding(iced::Padding {
-            top: 4.,
-            bottom: 6.,
-            left: (t.depth.min(6) * 16) as f32,
-            right: 4.,
-        })
-        .align_y(iced::Top);
+                })
+        ];
+        if child {
+            let chevron = icon_button(
+                "Fold / unfold (Ctrl+.)",
+                if self.folded.contains(&id) {
+                    "right"
+                } else {
+                    "down"
+                },
+                Some(super::Message::Board(Message::Fold(id))),
+                false,
+            )
+            .map(move |_| Message::Fold(id));
+            row = row.push(
+                container(chevron)
+                    .height(CONTROL_HEIGHT)
+                    .align_y(iced::Center),
+            );
+        }
+        let row = row
+            .push(container(content).width(Fill))
+            .push(
+                container(delete)
+                    .height(CONTROL_HEIGHT)
+                    .align_y(iced::Center),
+            )
+            .push(
+                container(subtask)
+                    .height(CONTROL_HEIGHT)
+                    .align_y(iced::Center),
+            )
+            .push(
+                container(options)
+                    .height(CONTROL_HEIGHT)
+                    .align_y(iced::Center),
+            )
+            .spacing(5)
+            .padding(iced::Padding {
+                top: 4.,
+                bottom: 6.,
+                left: (t.depth.min(6) * 16) as f32,
+                right: 4.,
+            })
+            .align_y(iced::Top);
         let drag = self.drag.clone();
         let accent = container(space())
             .width(Fill)
