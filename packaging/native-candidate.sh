@@ -54,6 +54,17 @@ cmp "$binary" "$scratch/squashfs-root/usr/bin/pinned"
 
 snap="$scratch/snap"
 cp -a "$payload" "$snap"
+# Iced opens X11 libraries dynamically, so they do not appear in ldd output
+# for the executable. Stage them against the same Ubuntu release as core24.
+(
+  cd "$scratch"
+  apt-get download libx11-6 libx11-xcb1 libxau6 libxcb1 libxcb-xkb1 libxcursor1 \
+    libxdmcp6 libxext6 libxfixes3 libxi6 libxinerama1 libxkbcommon0 \
+    libxkbcommon-x11-0 libxrandr2 libxrender1
+  for dependency in ./*.deb; do
+    dpkg-deb -x "$dependency" "$snap"
+  done
+)
 mkdir -p "$snap/meta/gui"
 sed "s|^Icon=pin$|Icon=\${SNAP}/meta/gui/icon.png|" "$root/packaging/pin.desktop" > "$snap/meta/gui/pinned.desktop"
 install -m644 "$root/logo/pin-256.png" "$snap/meta/gui/icon.png"
@@ -66,17 +77,12 @@ base: core24
 grade: stable
 confinement: strict
 architectures: [amd64]
-plugs:
-  gnome-46-2404:
-    interface: content
-    target: \$SNAP/gnome-platform
-    default-provider: gnome-46-2404
 apps:
   pinned:
     command: usr/bin/pinned
-    plugs: [home, desktop, x11, gnome-46-2404]
+    plugs: [home, desktop, x11]
     environment:
-      LD_LIBRARY_PATH: \$SNAP/gnome-platform/usr/lib/x86_64-linux-gnu
+      LD_LIBRARY_PATH: \$SNAP/usr/lib/x86_64-linux-gnu
 META
 snap pack "$snap" "$output"
 unsquashfs -cat "$output/pinned_${version}_amd64.snap" usr/bin/pinned > "$scratch/snap-binary"

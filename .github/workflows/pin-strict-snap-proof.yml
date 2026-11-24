@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v4
       - name: Download the verified native package candidate
         uses: actions/download-artifact@v4
         with:
@@ -17,19 +18,28 @@ jobs:
           run-id: 45390511257
           name: pin-native-package-candidate-3c77678dc0fd19cd5279dcd6f2bdef267825ca8a
           path: candidate
+      - name: Package the same native application with its X11 libraries
+        run: |
+          (cd candidate && sha256sum -c SHA256SUMS)
+          dpkg-deb -x candidate/pinned_0.3.1_amd64.deb "$RUNNER_TEMP/pin"
+          binary="$RUNNER_TEMP/pin/usr/bin/pinned"
+          printf '%s  %s\n' "$(jq -r .binary_sha256 candidate/BUILDINFO.json)" "$binary" | sha256sum -c
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends snapd squashfs-tools desktop-file-utils xvfb xauth xdotool
+          curl --max-time 90 -fsSLo "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          printf '%s  %s\n' ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 "$RUNNER_TEMP/appimagetool" | sha256sum -c
+          chmod 755 "$RUNNER_TEMP/appimagetool"
+          bash packaging/native-candidate.sh "$binary" fixed "$RUNNER_TEMP/appimagetool" 0.3.1
+          jq --arg packaging_commit "$GITHUB_SHA" '.packaging_commit = $packaging_commit' candidate/BUILDINFO.json > fixed/BUILDINFO.json
       - name: Verify the strict package and install it
         run: |
-          cd candidate
+          cd fixed
           sha256sum -c SHA256SUMS
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends snapd xvfb xauth xdotool
           sudo systemctl start snapd.socket
           test "$(snap debug confinement)" = strict
           sudo snap wait system seed.loaded
           sudo snap install core24
-          sudo snap install gnome-46-2404
           sudo snap install --dangerous pinned_0.3.1_amd64.snap
-          sudo snap connect pinned:gnome-46-2404 gnome-46-2404:gnome-46-2404
           snap list pinned
           snap connections pinned
       - name: Launch under enforced confinement with a real Markdown file
@@ -44,7 +54,7 @@ jobs:
           trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
           window=$(timeout 20 xdotool search --sync --onlyvisible --name '^Pin' | head -1)
           grep -Fx 'snap.pinned.pinned (enforce)' "/proc/$pid/attr/current"
-          xdotool windowfocus --sync "$window" mousemove --window "$window" 100 115 click 1 key End
+          xdotool windowfocus --sync "$window" mousemove --window "$window" 115 73 click 1 key End
           xdotool type --clearmodifiers ' updated'
           for i in {1..40}; do
             if grep -Fx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE"; then
@@ -55,3 +65,8 @@ jobs:
           cat "$PRIORITIES_FILE"
           exit 1
           CHECK
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pin-strict-snap-candidate
+          path: fixed/
+          if-no-files-found: error
