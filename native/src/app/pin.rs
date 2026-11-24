@@ -75,6 +75,7 @@ pub enum Message {
     Save,
     Header(bool),
     Context(Target),
+    FocusAdjacent(bool),
     Copy(bool),
     Paste,
     Pasted(Option<String>),
@@ -790,6 +791,14 @@ impl State {
                     o.offset = v.absolute_offset();
                 }
             }
+            Message::FocusAdjacent(down) => {
+                if let Target::Item(id) = self.active {
+                    if let Some(next_id) = self.adjacent_item(id, down) {
+                        self.active = Target::Item(next_id);
+                        return self.focus_and_reveal();
+                    }
+                }
+            }
             Message::ScrollTo(id, y) => {
                 return operation::scroll_to(id, scrollable::AbsoluteOffset { x: 0., y })
             }
@@ -886,6 +895,32 @@ impl State {
             .is_some_and(|o| o.panel == Panel::Date)
     }
 
+    fn visible_ids(&self) -> Vec<u64> {
+        let mut hidden = None;
+        let mut visible = vec![];
+        for t in &self.board.tasks {
+            if hidden.is_some_and(|depth| t.depth > depth) {
+                continue;
+            }
+            hidden = None;
+            visible.push(t.id);
+            if self.folded.contains(&t.id) {
+                hidden = Some(t.depth);
+            }
+        }
+        visible
+    }
+
+    fn adjacent_item(&self, id: u64, down: bool) -> Option<u64> {
+        let visible = self.visible_ids();
+        let pos = visible.iter().position(|&v| v == id)?;
+        if down {
+            visible.get(pos + 1).copied()
+        } else {
+            pos.checked_sub(1).and_then(|p| visible.get(p).copied())
+        }
+    }
+
     pub fn anchor_options(&mut self, pointer: Point) {
         if let Some(o) = &mut self.options {
             o.anchor = Point::new(pointer.x, (pointer.y - 38.).max(6.));
@@ -962,6 +997,44 @@ impl State {
                     matches!(press.key.as_ref(), keyboard::Key::Named(Named::ArrowDown)),
                 ))
             }
+            keyboard::Key::Named(Named::ArrowUp | Named::ArrowDown)
+                if command && self.options.is_none() && matches!(target, Target::Item(_)) =>
+            {
+                Some(Message::FocusAdjacent(matches!(
+                    press.key.as_ref(),
+                    keyboard::Key::Named(Named::ArrowDown)
+                )))
+            }
+            keyboard::Key::Named(Named::ArrowUp)
+                if !command
+                    && !shift
+                    && !press.modifiers.alt()
+                    && self.options.is_none()
+                    && matches!(target, Target::Item(_))
+                    && self.editor(target).is_some_and(|c| {
+                        let cursor = c.cursor();
+                        cursor.selection.is_none()
+                            && cursor.position.line == 0
+                            && cursor.position.column == 0
+                    })
+                    && self.adjacent_item(id, false).is_some() =>
+            {
+                Some(Message::FocusAdjacent(false))
+            }
+            keyboard::Key::Named(Named::ArrowDown)
+                if !command
+                    && !shift
+                    && !press.modifiers.alt()
+                    && self.options.is_none()
+                    && matches!(target, Target::Item(_))
+                    && self.editor(target).is_some_and(|c| {
+                        let cursor = c.cursor();
+                        cursor.selection.is_none() && cursor.position.column >= c.text().len()
+                    })
+                    && self.adjacent_item(id, true).is_some() =>
+            {
+                Some(Message::FocusAdjacent(true))
+            }
             keyboard::Key::Named(Named::Escape) if self.options.is_some() => {
                 Some(Message::CloseOptions)
             }
@@ -1011,10 +1084,14 @@ impl State {
                 .padding([12, 6]),
             );
         }
-        let add = button(text("+ Add task").size(13))
-            .padding([7, 9])
-            .on_press(Message::New(false))
-            .style(super::ghost);
+        let add = button(
+            row![action_icon("plus", 14, false), text("Add task").size(13)]
+                .spacing(6)
+                .align_y(iced::Center),
+        )
+        .padding([7, 9])
+        .on_press(Message::New(false))
+        .style(super::ghost);
         let footer = drag::target(
             container(add).width(Fill).padding([2, 0]),
             self.drag.clone(),
@@ -1118,7 +1195,14 @@ impl State {
                 ));
             }
             if t.daily {
-                badges = badges.push(text("↻ Daily").size(11).color(super::MUTED));
+                badges = badges.push(
+                    row![
+                        action_icon("repeat", 11, true),
+                        text("Daily").size(11).color(super::MUTED)
+                    ]
+                    .spacing(4)
+                    .align_y(iced::Center),
+                );
             }
             content = content.push(badges);
         }
@@ -1306,16 +1390,43 @@ impl State {
             .on_right_press(Message::Context(target))
             .into()
     }
-    fn option_button<'a>(&'a self, label: impl Into<String>, focus: u8) -> Element<'a, Message> {
+    fn option_shell<'a>(
+        &'a self,
+        content: Element<'a, Message>,
+        focus: u8,
+        full_width: bool,
+    ) -> Element<'a, Message> {
         let focused = self.options.as_ref().is_some_and(|o| o.focus == focus);
-        container(
-            button(text(label.into()).size(13))
-                .padding([6, 9])
-                .on_press_maybe(self.option_action(focus))
-                .style(move |theme, status| focus_style(theme, status, focused)),
+        let btn = button(content)
+            .padding([6, 9])
+            .on_press_maybe(self.option_action(focus))
+            .style(move |theme, status| focus_style(theme, status, focused));
+        let btn = if full_width { btn.width(Fill) } else { btn };
+        container(btn).id(format!("option-{focus}")).into()
+    }
+    fn option_button<'a>(&'a self, label: impl Into<String>, focus: u8) -> Element<'a, Message> {
+        self.option_shell(text(label.into()).size(13).into(), focus, false)
+    }
+    fn option_wide<'a>(&'a self, label: impl Into<String>, focus: u8) -> Element<'a, Message> {
+        self.option_shell(text(label.into()).size(13).into(), focus, true)
+    }
+    fn option_row<'a>(
+        &'a self,
+        icon: &'static str,
+        label: impl Into<String>,
+        focus: u8,
+    ) -> Element<'a, Message> {
+        self.option_shell(
+            row![action_icon(icon, 14, false), text(label.into()).size(13)]
+                .spacing(8)
+                .align_y(iced::Center)
+                .into(),
+            focus,
+            true,
         )
-        .id(format!("option-{focus}"))
-        .into()
+    }
+    fn option_icon<'a>(&'a self, icon: &'static str, focus: u8) -> Element<'a, Message> {
+        self.option_shell(action_icon(icon, 14, false), focus, false)
     }
     fn options_view(&self) -> Element<'_, Message> {
         let o = self.options.as_ref().unwrap();
@@ -1327,35 +1438,33 @@ impl State {
         match o.panel {
             Panel::Main => {
                 body = body
-                    .push(self.option_button(
-                        if item.daily {
-                            "✓ Repeat daily"
-                        } else {
-                            "Repeat daily"
-                        },
+                    .push(self.option_row(
+                        if item.daily { "check" } else { "repeat" },
+                        "Repeat daily",
                         0,
                     ))
                     .push(
-                        self.option_button(
+                        self.option_row(
+                            "calendar",
                             item.date
                                 .as_ref()
                                 .map_or_else(|| "Date…".into(), |d| display_date(d)),
                             1,
                         ),
                     )
-                    .push(self.option_button("Time…", 2))
-                    .push(self.option_button("Color…", 18))
-                    .push(self.option_button("Add subtask", 20))
-                    .push(self.option_button("Delete task", 21))
-                    .push(self.option_button("Close", 22));
+                    .push(self.option_row("clock", "Time…", 2))
+                    .push(self.option_row("palette", "Color…", 18))
+                    .push(self.option_row("plus", "Add subtask", 20))
+                    .push(self.option_row("trash", "Delete task", 21))
+                    .push(self.option_row("x", "Close", 22));
             }
             Panel::Date => {
                 body = body.push(
                     row![
-                        self.option_button("‹", 23),
+                        self.option_icon("left", 23),
                         container(text(o.calendar.format("%B %Y").to_string()).size(13))
                             .center_x(Fill),
-                        self.option_button("›", 24),
+                        self.option_icon("right", 24),
                         self.option_button("Back", 22),
                     ]
                     .align_y(iced::Center),
@@ -1414,7 +1523,7 @@ impl State {
                     }
                     body = body.push(days);
                 }
-                body = body.push(self.option_button("Clear date", 4));
+                body = body.push(self.option_wide("Clear date", 4));
             }
             Panel::Time => {
                 let value = o.time.text();
@@ -1436,12 +1545,12 @@ impl State {
                     .spacing(8)
                     .align_y(iced::Center),
                 );
-                body = body.push(self.option_button("Clear time", 27));
+                body = body.push(self.option_wide("Clear time", 27));
             }
             Panel::Hours | Panel::Minutes => {
                 body = body.push(self.option_button("Back", 22));
                 for n in 0..if o.panel == Panel::Hours { 24 } else { 60 } {
-                    body = body.push(self.option_button(format!("{n:02}"), n + 64));
+                    body = body.push(self.option_wide(format!("{n:02}"), n + 64));
                 }
             }
 
@@ -1462,11 +1571,18 @@ impl State {
                         let color = hex_color(hex);
                         container(
                             button(
-                                container(
-                                    text(if selected { "✓" } else { "" })
-                                        .size(14)
-                                        .color(Color::from_rgb8(20, 20, 20)),
-                                )
+                                container(if selected {
+                                    Element::from(
+                                        svg(svg::Handle::from_memory(icon_data("check")))
+                                            .width(13)
+                                            .height(13)
+                                            .style(|_, _| svg::Style {
+                                                color: Some(Color::from_rgb8(20, 20, 20)),
+                                            }),
+                                    )
+                                } else {
+                                    space().into()
+                                })
                                 .center(26),
                             )
                             .on_press(Message::Color(Some((*marker).into())))
@@ -1492,7 +1608,7 @@ impl State {
                     .spacing(8);
                     body = body.push(swatches);
                 }
-                body = body.push(self.option_button("No color", 17)).push(
+                body = body.push(self.option_wide("No color", 17)).push(
                     row![
                         container(self.field(Target::Color, "#rrggbb")).width(Fill),
                         self.option_button("Apply", 19)
@@ -1510,6 +1626,16 @@ impl State {
             .height(Length::Shrink)
             .into()
     }
+}
+
+fn action_icon(name: &'static str, size: u16, subtle: bool) -> Element<'static, Message> {
+    svg(svg::Handle::from_memory(icon_data(name)))
+        .width(size)
+        .height(size)
+        .style(move |theme, _| svg::Style {
+            color: Some(if subtle { muted(theme) } else { fg(theme) }),
+        })
+        .into()
 }
 
 fn fold_key(board: &Board, i: usize) -> String {
@@ -1731,5 +1857,21 @@ mod tests {
         );
         let reloaded = State::new(&s.markdown(), &s.folded_keys());
         assert!(reloaded.folded.contains(&1));
+    }
+
+    #[test]
+    fn arrow_navigation_traverses_visible_tasks_and_skips_folded_children() {
+        let mut s = State::new(
+            "- [ ] First\n  - [ ] Hidden child\n- [ ] Last\n",
+            &["First".into()],
+        );
+        assert_eq!(s.active, Target::Item(1));
+        let _ = s.update(Message::FocusAdjacent(true));
+        assert_eq!(s.active, Target::Item(3));
+        let _ = s.update(Message::FocusAdjacent(false));
+        assert_eq!(s.active, Target::Item(1));
+        s.folded.remove(&1);
+        let _ = s.update(Message::FocusAdjacent(true));
+        assert_eq!(s.active, Target::Item(2));
     }
 }
