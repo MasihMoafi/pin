@@ -140,7 +140,7 @@ jobs:
     steps:
       - name: Install Snapcraft
         run: sudo snap install snapcraft --classic
-      - name: Read the existing Pin listing visibility
+      - name: Make the approved Pin listing public
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
@@ -152,10 +152,16 @@ jobs:
           from craft_cli import EmitterMode, emit
           from snapcraft.store import StoreClientCLI, constants
 
-          emit.init(EmitterMode.QUIET, "snapcraft", "Pin metadata preflight")
+          emit.init(EmitterMode.QUIET, "snapcraft", "Pin listing visibility")
           client = StoreClientCLI()
           pin = client.get_account_info()["snaps"][constants.DEFAULT_SERIES]["pinned"]
           url = f"https://dashboard.snapcraft.io/dev/api/snaps/{pin['snap-id']}/metadata"
-          metadata = client.request("GET", url, headers={"Accept": "application/json"}).json()
-          print({key: metadata[key] for key in ("private", "unlisted")})
+          headers = {"Accept": "application/json"}
+          metadata = client.request("GET", url, headers=headers).json()
+          assert metadata["unlisted"] is False
+          if metadata["private"]:
+              client.request("POST", url, headers=headers, json={"private": False})
+          result = client.request("GET", url, headers=headers).json()
+          assert result["private"] is False and result["unlisted"] is False
+          print("pinned: public and listed")
           PY
