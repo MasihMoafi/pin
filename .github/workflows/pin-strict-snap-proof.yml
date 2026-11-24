@@ -1,0 +1,57 @@
+name: Verify Pin strict Snap
+on:
+  push:
+    branches: [work/pin-snap-confinement-20261124]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download the verified native package candidate
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 45390511257
+          name: pin-native-package-candidate-3c77678dc0fd19cd5279dcd6f2bdef267825ca8a
+          path: candidate
+      - name: Verify the strict package and install it
+        run: |
+          cd candidate
+          sha256sum -c SHA256SUMS
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends snapd xvfb xauth xdotool
+          sudo systemctl start snapd.socket
+          test "$(snap debug confinement)" = strict
+          sudo snap wait system seed.loaded
+          sudo snap install core24
+          sudo snap install gnome-46-2404
+          sudo snap install --dangerous pinned_0.3.1_amd64.snap
+          sudo snap connect pinned:gnome-46-2404 gnome-46-2404:gnome-46-2404
+          snap list pinned
+          snap connections pinned
+      - name: Launch under enforced confinement with a real Markdown file
+        run: |
+          mkdir -p "$HOME/Documents"
+          export PRIORITIES_FILE="$HOME/Documents/Pin-snap-smoke.md"
+          printf '%s\n' '- [ ] Release candidate smoke' > "$PRIORITIES_FILE"
+          xvfb-run -a -s '-screen 0 1024x768x24 -ac -nolisten tcp' bash -euo pipefail <<'CHECK'
+          unset XAUTHORITY
+          /snap/bin/pinned &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          window=$(timeout 20 xdotool search --sync --onlyvisible --name '^Pin' | head -1)
+          grep -Fx 'snap.pinned.pinned (enforce)' "/proc/$pid/attr/current"
+          xdotool windowfocus --sync "$window" mousemove --window "$window" 100 115 click 1 key End
+          xdotool type --clearmodifiers ' updated'
+          for i in {1..40}; do
+            if grep -Fx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE"; then
+              exit 0
+            fi
+            sleep .25
+          done
+          cat "$PRIORITIES_FILE"
+          exit 1
+          CHECK
