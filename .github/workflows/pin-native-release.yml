@@ -144,5 +144,6 @@ jobs:
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
-          snapcraft list --format json |
-            jq -e '.. | objects | select((.name // ."snap-name") == "pinned") | {name,visibility,private,status}'
+          set -o pipefail
+          snapcraft names --format json |
+            jq -e '.snaps[] | select(.name == "pinned") | {name, visibility}'
