@@ -60,32 +60,29 @@ jobs:
           sudo snap install core24
           sudo snap install --dangerous "$snap_file"
           export APPIMAGE_EXTRACT_AND_RUN=1
-          export PIN_APPIMAGE="$appimage"
           mkdir -p "$HOME/Documents"
           export PRIORITIES_FILE="$HOME/Documents/Pin-release-smoke.md"
-          xvfb-run -a -s '-screen 0 1024x768x24 -ac -nolisten tcp' bash -euo pipefail <<'CHECK'
-          unset XAUTHORITY
-          for package in /usr/bin/pinned "$PIN_APPIMAGE" /snap/bin/pinned; do
+          for package in /usr/bin/pinned "$appimage" /snap/bin/pinned; do
+            printf 'Testing %s\n' "$package"
             printf '%s\n' '- [ ] Release candidate smoke' > "$PRIORITIES_FILE"
-            "$package" &
-            pid=$!
-            trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
-            window=$(timeout 20 xdotool search --sync --onlyvisible --name '^Pin' | head -1)
-            if [[ "$package" = /snap/bin/pinned ]]; then
-              grep -Fx 'snap.pinned.pinned (enforce)' "/proc/$pid/attr/current"
-            fi
-            xdotool windowfocus --sync "$window" mousemove --window "$window" 115 73 click 1 key End
-            xdotool type --clearmodifiers ' updated'
-            for _ in {1..40}; do
-              grep -Fqx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE" && break
-              sleep .25
-            done
-            grep -Fx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE"
-            kill "$pid"
-            wait "$pid" || true
-            trap - EXIT
+            xvfb-run -a -s '-screen 0 1024x768x24 -ac -nolisten tcp' bash -euo pipefail -s -- "$package" <<'CHECK'
+          unset XAUTHORITY
+          setsid "$1" &
+          pid=$!
+          trap 'kill -- "-$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          window=$(timeout 20 xdotool search --sync --onlyvisible --name '^Pin' | head -1)
+          if [[ "$1" = /snap/bin/pinned ]]; then
+            grep -Fx 'snap.pinned.pinned (enforce)' "/proc/$pid/attr/current"
+          fi
+          xdotool windowfocus --sync "$window" mousemove --window "$window" 115 73 click 1 key End
+          xdotool type --clearmodifiers ' updated'
+          for _ in {1..40}; do
+            grep -Fqx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE" && break
+            sleep .25
           done
+          grep -Fx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE"
           CHECK
+          done
 
   github:
     if: github.ref_type == 'tag'
