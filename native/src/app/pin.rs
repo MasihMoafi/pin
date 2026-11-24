@@ -1628,7 +1628,7 @@ impl State {
     }
 }
 
-fn action_icon(name: &'static str, size: u16, subtle: bool) -> Element<'static, Message> {
+fn action_icon(name: &'static str, size: u32, subtle: bool) -> Element<'static, Message> {
     svg(svg::Handle::from_memory(icon_data(name)))
         .width(size)
         .height(size)
