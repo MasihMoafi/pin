@@ -149,8 +149,10 @@ jobs:
             jq -e '.snaps[] | select(.name == "pinned") | {name, visibility}'
           export PYTHONPATH=/snap/snapcraft/current/lib/python3.12/site-packages
           /snap/snapcraft/current/usr/bin/python3.12 - <<'PY'
+          from craft_cli import EmitterMode, emit
           from snapcraft.store import StoreClientCLI, constants
 
+          emit.init(EmitterMode.QUIET, "snapcraft", "Pin metadata preflight")
           client = StoreClientCLI()
           pin = client.get_account_info()["snaps"][constants.DEFAULT_SERIES]["pinned"]
           url = f"https://dashboard.snapcraft.io/dev/api/snaps/{pin['snap-id']}/metadata"
