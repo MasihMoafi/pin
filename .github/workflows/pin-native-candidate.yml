@@ -32,11 +32,11 @@ jobs:
             NATIVE_RUN=$(gh run list --workflow iced.yml --branch "$GITHUB_REF_NAME" --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           fi
           [[ "$NATIVE_RUN" =~ ^[0-9]+$ ]]
-          gh run view "$NATIVE_RUN" --json conclusion,headBranch,headSha,workflowName > "$RUNNER_TEMP/native-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN" > "$RUNNER_TEMP/native-run.json"
           jq -e --arg branch "$GITHUB_REF_NAME" '
-            .conclusion == "success" and .workflowName == "Native Iced apps" and .headBranch == $branch
+            .conclusion == "success" and .path == ".github/workflows/iced.yml" and .head_branch == $branch
           ' "$RUNNER_TEMP/native-run.json"
-          source_sha=$(jq -r .headSha "$RUNNER_TEMP/native-run.json")
+          source_sha=$(jq -r .head_sha "$RUNNER_TEMP/native-run.json")
           git merge-base --is-ancestor "$source_sha" HEAD
           git diff --exit-code "$source_sha" HEAD -- native/
           gh run download "$NATIVE_RUN" --name pin-iced-linux --dir "$RUNNER_TEMP/pin-native"
