@@ -132,3 +132,17 @@ jobs:
           test -n "$SNAPCRAFT_STORE_CREDENTIALS"
           snapcraft upload "pinned_${PIN_VERSION}_amd64.snap" --release=stable,edge
           snapcraft status pinned
+
+  store-visibility:
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Install Snapcraft
+        run: sudo snap install snapcraft --classic
+      - name: Read the existing Pin listing visibility
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          snapcraft list --format json |
+            jq -e '.. | objects | select((.name // ."snap-name") == "pinned") | {name,visibility,private,status}'
