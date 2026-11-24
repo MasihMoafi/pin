@@ -76,6 +76,9 @@ pub enum Message {
     Header(bool),
     Context(Target),
     FocusAdjacent(bool),
+    ShowHistory(bool),
+    ToggleHistory,
+    ClearHistory,
     Copy(bool),
     Paste,
     Pasted(Option<String>),
@@ -142,6 +145,7 @@ pub struct State {
     editors: BTreeMap<u64, text_editor::Content>,
     folded: HashSet<u64>,
     active: Target,
+    show_history: bool,
     options: Option<Options>,
     next_id: u64,
     today: String,
@@ -175,6 +179,7 @@ impl State {
             editors,
             folded: folds,
             active,
+            show_history: false,
             options: None,
             next_id,
             today,
@@ -182,6 +187,16 @@ impl State {
             drag: drag::Drag::default(),
             revision: 0,
         }
+    }
+    pub fn completed_count(&self) -> usize {
+        self.board
+            .tasks
+            .iter()
+            .filter(|t| t.depth == 0 && t.done)
+            .count()
+    }
+    pub fn showing_history(&self) -> bool {
+        self.show_history
     }
     pub fn has_options(&self) -> bool {
         self.options.is_some()
@@ -347,7 +362,8 @@ impl State {
             | Message::ApplyColor
             | Message::Copy(true)
             | Message::Pasted(Some(_))
-            | Message::DeleteWord(_, _) => true,
+            | Message::DeleteWord(_, _)
+            | Message::ClearHistory => true,
             Message::Activate => self
                 .options
                 .as_ref()
@@ -423,6 +439,9 @@ impl State {
             Message::New(sub) => {
                 let parent = sub.then(|| self.item_id());
                 self.options = None;
+                if !sub {
+                    self.show_history = false;
+                }
                 self.new_item(parent, String::new());
                 return self.focus_and_reveal();
             }
@@ -482,6 +501,9 @@ impl State {
             Message::Toggle(id) => {
                 self.board.toggle_done(id, &self.today);
                 self.revision += 1;
+                if self.active == Target::Item(id) && !self.visible_ids().contains(&id) {
+                    self.active = Target::Item(self.visible_ids().into_iter().next().unwrap_or(0));
+                }
                 return self.focus_and_reveal();
             }
             Message::Fold(id) => {
@@ -799,6 +821,37 @@ impl State {
                     }
                 }
             }
+            Message::ShowHistory(history) => {
+                self.options = None;
+                self.show_history = history;
+                self.active = Target::Item(self.visible_ids().into_iter().next().unwrap_or(0));
+                return operation::scroll_to(LIST, scrollable::AbsoluteOffset::default())
+                    .chain(self.focus_and_reveal());
+            }
+            Message::ToggleHistory => {
+                return self.update(Message::ShowHistory(!self.show_history));
+            }
+            Message::ClearHistory => {
+                let mut i = 0;
+                let mut removed = false;
+                while i < self.board.tasks.len() {
+                    if self.board.tasks[i].depth == 0 && self.board.tasks[i].done {
+                        let end = self.board.end(i);
+                        self.board.tasks.drain(i..end);
+                        removed = true;
+                    } else {
+                        i += 1;
+                    }
+                }
+                if removed {
+                    self.options = None;
+                    self.show_history = false;
+                    self.sync();
+                    self.active = Target::Item(self.visible_ids().into_iter().next().unwrap_or(0));
+                    self.revision += 1;
+                    return self.focus_and_reveal();
+                }
+            }
             Message::ScrollTo(id, y) => {
                 return operation::scroll_to(id, scrollable::AbsoluteOffset { x: 0., y })
             }
@@ -895,20 +948,32 @@ impl State {
             .is_some_and(|o| o.panel == Panel::Date)
     }
 
-    fn visible_ids(&self) -> Vec<u64> {
+    fn visible_rows(&self) -> Vec<(usize, &Item)> {
         let mut hidden = None;
+        let mut root_in_tab = false;
         let mut visible = vec![];
-        for t in &self.board.tasks {
+        for (i, t) in self.board.tasks.iter().enumerate() {
+            if t.depth == 0 {
+                root_in_tab = t.done == self.show_history;
+                hidden = None;
+            }
+            if !root_in_tab {
+                continue;
+            }
             if hidden.is_some_and(|depth| t.depth > depth) {
                 continue;
             }
             hidden = None;
-            visible.push(t.id);
+            visible.push((i, t));
             if self.folded.contains(&t.id) {
                 hidden = Some(t.depth);
             }
         }
         visible
+    }
+
+    fn visible_ids(&self) -> Vec<u64> {
+        self.visible_rows().into_iter().map(|(_, t)| t.id).collect()
     }
 
     fn adjacent_item(&self, id: u64, down: bool) -> Option<u64> {
@@ -951,6 +1016,7 @@ impl State {
                 Physical::Code(Code::KeyS) => Some(Message::Save),
                 Physical::Code(Code::KeyN) => Some(Message::New(shift)),
                 Physical::Code(Code::KeyT) => Some(Message::New(true)),
+                Physical::Code(Code::KeyH) => Some(Message::ToggleHistory),
                 Physical::Code(Code::KeyD) => Some(Message::Options(id)),
                 Physical::Code(Code::Period) => Some(Message::Fold(id)),
                 _ => None,
@@ -1054,18 +1120,7 @@ impl State {
     }
 
     pub fn view(&self, size: Size) -> Element<'_, Message> {
-        let mut hidden = None;
-        let mut visible = vec![];
-        for (i, t) in self.board.tasks.iter().enumerate() {
-            if hidden.is_some_and(|depth| t.depth > depth) {
-                continue;
-            }
-            hidden = None;
-            visible.push((i, t));
-            if self.folded.contains(&t.id) {
-                hidden = Some(t.depth);
-            }
-        }
+        let visible = self.visible_rows();
         let last = visible.last().map(|(_, t)| t.id);
         let items = keyed_column(
             visible
@@ -1074,32 +1129,58 @@ impl State {
         )
         .spacing(8);
         let mut body = column![items].spacing(4).padding([12, 11]);
-        if self.board.tasks.is_empty() {
-            body = body.push(
-                container(
-                    text("Add your first priority.")
+        if self.show_history {
+            if self.completed_count() == 0 {
+                body = body.push(
+                    container(text("No completed tasks yet.").size(14).color(super::MUTED))
+                        .padding([12, 6]),
+                );
+            } else {
+                let clear = button(
+                    row![
+                        action_icon("trash", 14, false),
+                        text("Clear history").size(13)
+                    ]
+                    .spacing(6)
+                    .align_y(iced::Center),
+                )
+                .padding([7, 9])
+                .on_press(Message::ClearHistory)
+                .style(super::ghost);
+                body = body.push(container(clear).width(Fill).padding([2, 0]));
+            }
+        } else {
+            if last.is_none() {
+                body = body.push(
+                    container(
+                        text(if self.completed_count() > 0 {
+                            "All clear — check History or add a priority."
+                        } else {
+                            "Add your first priority."
+                        })
                         .size(14)
                         .color(super::MUTED),
-                )
-                .padding([12, 6]),
+                    )
+                    .padding([12, 6]),
+                );
+            }
+            let add = button(
+                row![action_icon("plus", 14, false), text("Add task").size(13)]
+                    .spacing(6)
+                    .align_y(iced::Center),
+            )
+            .padding([7, 9])
+            .on_press(Message::New(false))
+            .style(super::ghost);
+            let footer = drag::target(
+                container(add).width(Fill).padding([2, 0]),
+                self.drag.clone(),
+                last.unwrap_or(0),
+                true,
+                last.is_some_and(|id| self.can_drop(id)),
             );
+            body = body.push(footer);
         }
-        let add = button(
-            row![action_icon("plus", 14, false), text("Add task").size(13)]
-                .spacing(6)
-                .align_y(iced::Center),
-        )
-        .padding([7, 9])
-        .on_press(Message::New(false))
-        .style(super::ghost);
-        let footer = drag::target(
-            container(add).width(Fill).padding([2, 0]),
-            self.drag.clone(),
-            last.unwrap_or(0),
-            true,
-            last.is_some_and(|id| self.can_drop(id)),
-        );
-        body = body.push(footer);
         let list = container(
             scrollable(body)
                 .id(LIST)
@@ -1322,7 +1403,7 @@ impl State {
             .padding(iced::Padding {
                 top: 4.,
                 bottom: 6.,
-                left: (t.depth.min(6) * 16) as f32,
+                left: 6. + (t.depth.min(6) * 16) as f32,
                 right: 4.,
             })
             .align_y(iced::Top);
@@ -1663,7 +1744,7 @@ fn tint(theme: &Theme, color: Option<&str>) -> Color {
     let base = bg(theme);
     let Some(color) = color else { return base };
     let c = hex_color(&color_hex(color));
-    let alpha = if super::is_dark(theme) { 0.2 } else { 0.11 };
+    let alpha = if super::is_dark(theme) { 0.15 } else { 0.11 };
     Color::from_rgb(
         base.r * (1. - alpha) + c.r * alpha,
         base.g * (1. - alpha) + c.g * alpha,
@@ -1873,5 +1954,25 @@ mod tests {
         s.folded.remove(&1);
         let _ = s.update(Message::FocusAdjacent(true));
         assert_eq!(s.active, Target::Item(2));
+    }
+
+    #[test]
+    fn active_and_history_tabs_separate_completed_tasks_with_undoable_clear() {
+        let mut s = State::new(
+            "- [ ] Active parent\n  - [x] Done child\n- [x] Finished root\n  - [x] Finished child\n",
+            &[],
+        );
+        assert_eq!(s.completed_count(), 1);
+        assert_eq!(s.visible_ids(), vec![1, 2]);
+        let _ = s.update(Message::ShowHistory(true));
+        assert!(s.showing_history());
+        assert_eq!(s.visible_ids(), vec![3, 4]);
+        let before_clear = s.snapshot();
+        let _ = s.update(Message::ClearHistory);
+        assert!(!s.showing_history());
+        assert_eq!(s.completed_count(), 0);
+        assert_eq!(s.markdown(), "- [ ] Active parent\n  - [x] Done child\n");
+        let _ = s.restore(before_clear);
+        assert_eq!(s.completed_count(), 1);
     }
 }

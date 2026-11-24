@@ -255,6 +255,7 @@ fn shortcut(physical: Physical, modifiers: keyboard::Modifiers) -> Option<Messag
         Physical::Code(Code::KeyS) => Some(Message::Save),
         Physical::Code(Code::KeyM) if modifiers.shift() => Some(Message::TogglePreview),
         Physical::Code(Code::KeyN) => Some(Message::Board(pin::Message::New(modifiers.shift()))),
+        Physical::Code(Code::KeyH) => Some(Message::Board(pin::Message::ToggleHistory)),
         _ => None,
     }
 }
@@ -998,20 +999,64 @@ impl Notes {
         }
     }
     fn view(&self) -> Element<'_, Message> {
-        let mut header = row![mouse_area(
+        let history_count = self.board.as_ref().map_or(0, pin::State::completed_count);
+        let show_tabs =
+            history_count > 0 || self.board.as_ref().is_some_and(pin::State::showing_history);
+        let title = mouse_area(
             container(
                 text(if self.board.is_some() { "Pin" } else { "Notes" })
                     .size(13)
                     .font(Font {
                         weight: iced::font::Weight::Semibold,
                         ..Font::with_name("Inter")
-                    })
+                    }),
             )
-            .width(Fill)
+            .width(if show_tabs {
+                Length::Shrink
+            } else {
+                Length::Fill
+            })
             .height(Fill)
-            .align_y(iced::Center)
+            .align_y(iced::Center),
         )
-        .on_press(Message::Drag),];
+        .on_press(Message::Drag);
+        let mut header = row![title];
+        if show_tabs {
+            let in_history = self.board.as_ref().is_some_and(pin::State::showing_history);
+            let compact = self.bounds.width < 360.;
+            let mut tabs = row![];
+            if !compact {
+                tabs = tabs.push(header_tab(
+                    "Active",
+                    !in_history,
+                    Message::Board(pin::Message::ShowHistory(false)),
+                ));
+            }
+            tabs = tabs.push(header_tab(
+                if compact && in_history {
+                    "Active".to_owned()
+                } else {
+                    format!("History ({history_count})")
+                },
+                in_history && !compact,
+                Message::Board(pin::Message::ShowHistory(!(compact && in_history))),
+            ));
+            header = header
+                .push(space().width(8))
+                .push(
+                    container(tabs.spacing(2).padding(2)).style(|theme| container::Style {
+                        border: Border {
+                            color: line(theme),
+                            width: 1.,
+                            radius: 6.into(),
+                        },
+                        ..Default::default()
+                    }),
+                )
+                .push(
+                    mouse_area(container(space()).width(Fill).height(Fill)).on_press(Message::Drag),
+                );
+        }
         if self.board.is_some() {
             header = header.push(icon_button(
                 "New task (Ctrl+N)",
@@ -1266,6 +1311,31 @@ impl Notes {
         }
         layers.into()
     }
+}
+
+fn header_tab(
+    label: impl Into<String>,
+    active: bool,
+    action: Message,
+) -> Element<'static, Message> {
+    button(text(label.into()).size(11))
+        .padding([3, 7])
+        .on_press(action)
+        .style(move |theme, status| {
+            let mut style = ghost(theme, status);
+            if active {
+                style.background = Some(Background::Color(if is_dark(theme) {
+                    Color::from_rgb8(43, 43, 48)
+                } else {
+                    Color::from_rgb8(236, 236, 239)
+                }));
+                style.text_color = fg(theme);
+            } else {
+                style.text_color = muted(theme);
+            }
+            style
+        })
+        .into()
 }
 
 fn menu_item(
