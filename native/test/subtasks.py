@@ -95,17 +95,20 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete', 'history']:
         def saved(expected):
             wait(lambda: file.read_text() == expected, 'Saved list mismatch: ' + file.read_text())
         if label == 'history':
+            def history_visible(name):
+                picture = shot(name).convert('RGB')
+                checkbox = picture.crop((47*scale, 68*scale, 62*scale, 82*scale))
+                return any(color == (45, 151, 148) for _, color in checkbox.getcolors())
+
             assert len(boxes(shot('active'), scale)) == 4
             x('mousemove', '--window', wid, 56*scale, 21*scale, 'click', 1)
             time.sleep(.2)
-            picture = shot('history').convert('RGB')
-            assert any(picture.getpixel((px*scale, py*scale)) == (45, 151, 148)
-                       for px in range(47, 62) for py in range(68, 82)), 'History shows a checked row'
+            assert history_visible('history'), 'History shows a checked row'
             x('click', 1)
             time.sleep(.2)
             assert len(boxes(shot('active-again'), scale)) == 4, 'The same button returns to Active'
             x('key', 'ctrl+Tab', 'Return')
-            assert not boxes(shot('history-keyboard'), scale), 'Keyboard activation opens History'
+            assert history_visible('history-keyboard'), 'Keyboard activation opens History'
             x('key', 'ctrl+h')
             assert len(boxes(shot('active-keyboard'), scale)) == 4, 'The history shortcut returns to Active'
             saved(fixture)
