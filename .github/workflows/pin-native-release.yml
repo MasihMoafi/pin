@@ -1,0 +1,137 @@
+name: Pin native release 0.3.1
+
+on:
+  push:
+    branches: [work/pin-snap-confinement-20261124]
+    tags: [v0.3.1]
+    paths: [.github/workflows/pin-native-release.yml]
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PIN_VERSION: 0.3.1
+  PIN_ARTIFACT_RUN: '45411345754'
+  PIN_NATIVE_SOURCE: b89c5fe4bddf5caeb02b14cd93ae54d79077820d
+  PIN_PACKAGE_SOURCE: 7e2ebb1a15dc9add5470cb3151d8e3b42145615f
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.PIN_ARTIFACT_RUN }}
+          name: pin-strict-snap-candidate
+          path: candidate
+      - name: Verify version, tested source and package digests
+        run: |
+          git diff --exit-code "$PIN_NATIVE_SOURCE" HEAD -- native/
+          git diff --exit-code "$PIN_PACKAGE_SOURCE" HEAD -- packaging/
+          python3 -c 'import os,tomllib; assert tomllib.load(open("native/Cargo.toml","rb"))["package"]["version"] == os.environ["PIN_VERSION"]'
+          if [[ "$GITHUB_REF_TYPE" = tag ]]; then test "$GITHUB_REF_NAME" = "v$PIN_VERSION"; fi
+          cd candidate
+          jq -e --arg native "$PIN_NATIVE_SOURCE" --arg package "$PIN_PACKAGE_SOURCE" --arg version "$PIN_VERSION" \
+            '.source_commit == $native and .packaging_commit == $package and .version == $version' BUILDINFO.json
+          sha256sum -c SHA256SUMS
+          cat SHA256SUMS
+      - name: Install and check the exact packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends snapd squashfs-tools xvfb xauth xdotool "./candidate/pinned_${PIN_VERSION}_amd64.deb"
+          candidate="$PWD/candidate"
+          snap_file="$candidate/pinned_${PIN_VERSION}_amd64.snap"
+          appimage="$candidate/Pin-$PIN_VERSION.AppImage"
+          chmod +x "$appimage"
+          expected=$(jq -r .binary_sha256 "$candidate/BUILDINFO.json")
+          test "$(sha256sum /usr/bin/pinned | cut -d ' ' -f1)" = "$expected"
+          test "$(unsquashfs -cat "$snap_file" usr/bin/pinned | sha256sum | cut -d ' ' -f1)" = "$expected"
+          (cd "$RUNNER_TEMP" && "$appimage" --appimage-extract > /dev/null)
+          test "$(sha256sum "$RUNNER_TEMP/squashfs-root/usr/bin/pinned" | cut -d ' ' -f1)" = "$expected"
+          test "$(snap debug confinement)" = strict
+          sudo snap wait system seed.loaded
+          sudo snap install core24
+          sudo snap install --dangerous "$snap_file"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export PIN_APPIMAGE="$appimage"
+          mkdir -p "$HOME/Documents"
+          export PRIORITIES_FILE="$HOME/Documents/Pin-release-smoke.md"
+          xvfb-run -a -s '-screen 0 1024x768x24 -ac -nolisten tcp' bash -euo pipefail <<'CHECK'
+          unset XAUTHORITY
+          for package in /usr/bin/pinned "$PIN_APPIMAGE" /snap/bin/pinned; do
+            printf '%s\n' '- [ ] Release candidate smoke' > "$PRIORITIES_FILE"
+            "$package" &
+            pid=$!
+            trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+            window=$(timeout 20 xdotool search --sync --onlyvisible --name '^Pin' | head -1)
+            if [[ "$package" = /snap/bin/pinned ]]; then
+              grep -Fx 'snap.pinned.pinned (enforce)' "/proc/$pid/attr/current"
+            fi
+            xdotool windowfocus --sync "$window" mousemove --window "$window" 115 73 click 1 key End
+            xdotool type --clearmodifiers ' updated'
+            for _ in {1..40}; do
+              grep -Fqx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE" && break
+              sleep .25
+            done
+            grep -Fx -- '- [ ] Release candidate smoke updated' "$PRIORITIES_FILE"
+            kill "$pid"
+            wait "$pid" || true
+            trap - EXIT
+          done
+          CHECK
+
+  github:
+    if: github.ref_type == 'tag'
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.PIN_ARTIFACT_RUN }}
+          name: pin-strict-snap-candidate
+          path: candidate
+      - name: Publish GitHub release
+        working-directory: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          sha256sum -c SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Pin $PIN_VERSION" \
+            --notes "Pin now uses its native desktop interface. Active tasks and completed-task history have separate tabs. Use the drag handle beside each checkbox to reorder tasks, or the row trash button to delete a task with undo. This release includes a Debian package, AppImage, and strict Snap for Linux x86-64." \
+            "Pin-$PIN_VERSION.AppImage" "pinned_${PIN_VERSION}_amd64.deb" "pinned_${PIN_VERSION}_amd64.snap" SHA256SUMS BUILDINFO.json
+
+  snap:
+    if: github.ref_type == 'tag'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.PIN_ARTIFACT_RUN }}
+          name: pin-strict-snap-candidate
+          path: candidate
+      - name: Install Snapcraft
+        run: sudo snap install snapcraft --classic
+      - name: Publish the verified Snap to stable and edge
+        working-directory: candidate
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          sha256sum -c SHA256SUMS
+          test -n "$SNAPCRAFT_STORE_CREDENTIALS"
+          snapcraft upload "pinned_${PIN_VERSION}_amd64.snap" --release=stable,edge
+          snapcraft status pinned
