@@ -99,10 +99,15 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete', 'history']:
             x('mousemove', '--window', wid, 56*scale, 21*scale, 'click', 1)
             time.sleep(.2)
             picture = shot('history').convert('RGB')
-            assert (45, 151, 148) in picture.getdata(), 'History shows a checked row'
+            assert any(picture.getpixel((px*scale, py*scale)) == (45, 151, 148)
+                       for px in range(47, 62) for py in range(68, 82)), 'History shows a checked row'
             x('click', 1)
             time.sleep(.2)
             assert len(boxes(shot('active-again'), scale)) == 4, 'The same button returns to Active'
+            x('key', 'ctrl+Tab', 'Return')
+            assert not boxes(shot('history-keyboard'), scale), 'Keyboard activation opens History'
+            x('key', 'ctrl+h')
+            assert len(boxes(shot('active-keyboard'), scale)) == 4, 'The history shortcut returns to Active'
             saved(fixture)
             x('mousemove', '--window', wid, (width-25)*scale, 21*scale, 'click', 1)
             p.wait(timeout=5)

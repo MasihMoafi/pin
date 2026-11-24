@@ -578,8 +578,7 @@ impl Notes {
                     pin::Message::Redo => return self.update(Message::Redo),
                     pin::Message::Save => return self.update(Message::Save),
                     pin::Message::Header(reverse) => {
-                        self.focus = if reverse { 6 } else { 9 };
-                        return Task::none();
+                        return self.update(Message::FocusTab(reverse));
                     }
                     pin::Message::Context(target) => {
                         self.board.as_mut().unwrap().set_active(target);
@@ -839,7 +838,7 @@ impl Notes {
                     }
                     let mut order = vec![0];
                     if self.board.is_some() {
-                        order.push(9);
+                        order.extend([11, 9]);
                     } else {
                         order.push(10);
                     }
@@ -977,6 +976,11 @@ impl Notes {
                 .as_ref()
                 .map(|_| Message::Board(pin::Message::New(false))),
             10 => self.board.is_none().then_some(Message::TogglePreview),
+            11 => self
+                .board
+                .as_ref()
+                .filter(|board| board.completed_count() > 0 || board.showing_history())
+                .map(|_| Message::Board(pin::Message::ToggleHistory)),
             _ => None,
         }
     }
@@ -1000,8 +1004,7 @@ impl Notes {
     }
     fn view(&self) -> Element<'_, Message> {
         let history_count = self.board.as_ref().map_or(0, pin::State::completed_count);
-        let show_tabs =
-            history_count > 0 || self.board.as_ref().is_some_and(pin::State::showing_history);
+        let history_action = self.header_action(11);
         let title = mouse_area(
             container(
                 text(if self.board.is_some() { "Pin" } else { "Notes" })
@@ -1011,7 +1014,7 @@ impl Notes {
                         ..Font::with_name("Inter")
                     }),
             )
-            .width(if show_tabs {
+            .width(if history_action.is_some() {
                 Length::Shrink
             } else {
                 Length::Fill
@@ -1021,9 +1024,9 @@ impl Notes {
         )
         .on_press(Message::Drag);
         let mut header = row![title];
-        if show_tabs {
+        if let Some(history_action) = history_action {
             let in_history = self.board.as_ref().is_some_and(pin::State::showing_history);
-            let tabs: Element<'_, Message> = if self.bounds.width < 360. {
+            let tabs: Element<'_, Message> = if self.bounds.width < 400. {
                 icon_button(
                     if in_history {
                         "Show active tasks (Ctrl+H)"
@@ -1031,8 +1034,8 @@ impl Notes {
                         "Show history (Ctrl+H)"
                     },
                     if in_history { "left" } else { "clock" },
-                    Some(Message::Board(pin::Message::ToggleHistory)),
-                    false,
+                    Some(history_action),
+                    self.focus == 11,
                 )
             } else {
                 container(
@@ -1040,11 +1043,13 @@ impl Notes {
                         header_tab(
                             "Active",
                             !in_history,
+                            in_history && self.focus == 11,
                             Message::Board(pin::Message::ShowHistory(false)),
                         ),
                         header_tab(
                             format!("History ({history_count})"),
                             in_history,
+                            !in_history && self.focus == 11,
                             Message::Board(pin::Message::ShowHistory(true)),
                         )
                     ]
@@ -1324,13 +1329,14 @@ impl Notes {
 fn header_tab(
     label: impl Into<String>,
     active: bool,
+    focused: bool,
     action: Message,
 ) -> Element<'static, Message> {
     button(text(label.into()).size(11))
         .padding([3, 7])
         .on_press(action)
         .style(move |theme, status| {
-            let mut style = ghost(theme, status);
+            let mut style = focus_style(theme, status, focused);
             if active {
                 style.background = Some(Background::Color(if is_dark(theme) {
                     Color::from_rgb8(43, 43, 48)

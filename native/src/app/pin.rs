@@ -137,6 +137,7 @@ pub struct Snapshot {
     editors: BTreeMap<u64, EditorSnapshot>,
     folded: HashSet<u64>,
     active: Target,
+    show_history: bool,
     options: Option<Options>,
     offset: scrollable::AbsoluteOffset,
 }
@@ -229,6 +230,7 @@ impl State {
                 .collect(),
             folded: self.folded.clone(),
             active: self.active,
+            show_history: self.show_history,
             options: self.options.as_ref().map(|o| Options {
                 id: o.id,
                 date: EditorSnapshot::new(&o.date).restore(),
@@ -254,6 +256,7 @@ impl State {
             .collect();
         self.folded = snapshot.folded;
         self.active = snapshot.active;
+        self.show_history = snapshot.show_history;
         self.options = snapshot.options;
         self.offset = snapshot.offset;
         self.drag.cancel();
@@ -1974,5 +1977,7 @@ mod tests {
         assert_eq!(s.markdown(), "- [ ] Active parent\n  - [x] Done child\n");
         let _ = s.restore(before_clear);
         assert_eq!(s.completed_count(), 1);
+        assert!(s.showing_history());
+        assert_eq!(s.visible_ids(), vec![3, 4]);
     }
 }
