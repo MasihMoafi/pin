@@ -55,13 +55,15 @@ def physical_key(code, shift=False):
 def physical_n(shift=False):
     physical_key(57, shift)
 
-for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
+for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete', 'history']:
     case = out / label
     config = case / 'config/Pin'
     config.mkdir(parents=True, exist_ok=True)
     file = case / 'Pin.md'
-    file.write_text(initial)
-    (config / 'iced.json').write_text(json.dumps(dict(width=460, height=560, pinned=False)))
+    width = 280 if label == 'history' else 460
+    fixture = initial + '- [x] Finished project\n' if label == 'history' else initial
+    file.write_text(fixture)
+    (config / 'iced.json').write_text(json.dumps(dict(width=width, height=560, pinned=False)))
     run_env = dict(env, XDG_CONFIG_HOME=str(case / 'config'), PRIORITIES_FILE=str(file))
     with (case / 'log').open('w') as log:
         p = subprocess.Popen([binary], env=run_env, stdout=log, stderr=log, start_new_session=True)
@@ -92,7 +94,23 @@ for label in ['mouse', 'keyboard', 'nested', 'drag', 'delete']:
             time.sleep(.15)
         def saved(expected):
             wait(lambda: file.read_text() == expected, 'Saved list mismatch: ' + file.read_text())
-        if label == 'mouse':
+        if label == 'history':
+            assert len(boxes(shot('active'), scale)) == 4
+            x('mousemove', '--window', wid, 56*scale, 21*scale, 'click', 1)
+            time.sleep(.2)
+            picture = shot('history').convert('RGB')
+            assert (45, 151, 148) in picture.getdata(), 'History shows a checked row'
+            x('click', 1)
+            time.sleep(.2)
+            assert len(boxes(shot('active-again'), scale)) == 4, 'The same button returns to Active'
+            saved(fixture)
+            x('mousemove', '--window', wid, (width-25)*scale, 21*scale, 'click', 1)
+            p.wait(timeout=5)
+            assert p.returncode == 0, 'Close remains clickable at minimum width'
+            checks.append('The compact History icon switches both ways and leaves Close available')
+            print('PASS', checks[-1], flush=True)
+            continue
+        elif label == 'mouse':
             # Focus one parent, then click another parent's plus.
             click_row(0, 120)
             click_row(1, 400)

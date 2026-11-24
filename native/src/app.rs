@@ -1023,39 +1023,47 @@ impl Notes {
         let mut header = row![title];
         if show_tabs {
             let in_history = self.board.as_ref().is_some_and(pin::State::showing_history);
-            let compact = self.bounds.width < 360.;
-            let mut tabs = row![];
-            if !compact {
-                tabs = tabs.push(header_tab(
-                    "Active",
-                    !in_history,
-                    Message::Board(pin::Message::ShowHistory(false)),
-                ));
-            }
-            tabs = tabs.push(header_tab(
-                if compact && in_history {
-                    "Active".to_owned()
-                } else {
-                    format!("History ({history_count})")
-                },
-                in_history && !compact,
-                Message::Board(pin::Message::ShowHistory(!(compact && in_history))),
-            ));
-            header = header
-                .push(space().width(8))
-                .push(
-                    container(tabs.spacing(2).padding(2)).style(|theme| container::Style {
-                        border: Border {
-                            color: line(theme),
-                            width: 1.,
-                            radius: 6.into(),
-                        },
-                        ..Default::default()
-                    }),
+            let tabs: Element<'_, Message> = if self.bounds.width < 360. {
+                icon_button(
+                    if in_history {
+                        "Show active tasks (Ctrl+H)"
+                    } else {
+                        "Show history (Ctrl+H)"
+                    },
+                    if in_history { "left" } else { "clock" },
+                    Some(Message::Board(pin::Message::ToggleHistory)),
+                    false,
                 )
-                .push(
-                    mouse_area(container(space()).width(Fill).height(Fill)).on_press(Message::Drag),
-                );
+            } else {
+                container(
+                    row![
+                        header_tab(
+                            "Active",
+                            !in_history,
+                            Message::Board(pin::Message::ShowHistory(false)),
+                        ),
+                        header_tab(
+                            format!("History ({history_count})"),
+                            in_history,
+                            Message::Board(pin::Message::ShowHistory(true)),
+                        )
+                    ]
+                    .spacing(2)
+                    .padding(2),
+                )
+                .style(|theme| container::Style {
+                    border: Border {
+                        color: line(theme),
+                        width: 1.,
+                        radius: 6.into(),
+                    },
+                    ..Default::default()
+                })
+                .into()
+            };
+            header = header.push(space().width(8)).push(tabs).push(
+                mouse_area(container(space()).width(Fill).height(Fill)).on_press(Message::Drag),
+            );
         }
         if self.board.is_some() {
             header = header.push(icon_button(
