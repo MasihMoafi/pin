@@ -825,7 +825,7 @@ impl State {
                 self.options = None;
                 self.show_history = history;
                 self.active = Target::Item(self.visible_ids().into_iter().next().unwrap_or(0));
-                return operation::scroll_to(LIST, scrollable::AbsoluteOffset::default())
+                return operation::scroll_to(LIST, scrollable::AbsoluteOffset { x: 0., y: 0. })
                     .chain(self.focus_and_reveal());
             }
             Message::ToggleHistory => {
