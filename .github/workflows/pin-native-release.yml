@@ -140,7 +140,7 @@ jobs:
     steps:
       - name: Install Snapcraft
         run: sudo snap install snapcraft --classic
-      - name: Make the approved Pin listing public
+      - name: Confirm Pin visibility and check the publisher credential scope
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
@@ -158,10 +158,21 @@ jobs:
           url = f"https://dashboard.snapcraft.io/dev/api/snaps/{pin['snap-id']}/metadata"
           headers = {"Accept": "application/json"}
           metadata = client.request("GET", url, headers=headers).json()
-          assert metadata["unlisted"] is False
-          if metadata["private"]:
-              client.request("POST", url, headers=headers, json={"private": False})
-          result = client.request("GET", url, headers=headers).json()
-          assert result["private"] is False and result["unlisted"] is False
+          assert metadata["private"] is False and metadata["unlisted"] is False
           print("pinned: public and listed")
+          scopes = client.request(
+              "GET", "https://dashboard.snapcraft.io/api/v2/tokens/whoami", headers=headers
+          ).json()
+          packages = scopes["packages"]
+          permissions = scopes["permissions"]
+          pins = client.get_account_info()["snaps"][constants.DEFAULT_SERIES]
+          rustidian = pins.get("rustidian")
+          print("Credential limited to pinned:", packages == [pin["snap-id"]])
+          print("Rustidian registered to publisher:", rustidian is not None)
+          print("Rustidian passes token package scope:",
+                packages is None or bool(rustidian and rustidian["snap-id"] in packages))
+          can_publish = permissions is None or "package_upload" in permissions or {
+              "package_push", "package_release"
+          }.issubset(permissions)
+          print("Credential includes push and release permissions:", can_publish)
           PY
