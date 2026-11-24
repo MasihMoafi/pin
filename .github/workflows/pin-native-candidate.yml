@@ -1,0 +1,87 @@
+name: Pin native package candidate
+on:
+  push:
+    branches: ['work/pin-speed-*']
+    paths:
+      - '.github/workflows/pin-native-candidate.yml'
+      - 'packaging/native-candidate.sh'
+      - 'packaging/pin.desktop'
+  workflow_dispatch:
+    inputs:
+      native_run:
+        description: Successful Native Iced apps run on this branch
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify the source and download the tested Iced executable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_RUN: ${{ inputs.native_run }}
+        run: |
+          if [[ -z "$NATIVE_RUN" ]]; then
+            NATIVE_RUN=$(gh run list --workflow iced.yml --branch "$GITHUB_REF_NAME" --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          fi
+          [[ "$NATIVE_RUN" =~ ^[0-9]+$ ]]
+          gh run view "$NATIVE_RUN" --json conclusion,headBranch,headSha,workflowName > "$RUNNER_TEMP/native-run.json"
+          jq -e --arg branch "$GITHUB_REF_NAME" '
+            .conclusion == "success" and .workflowName == "Native Iced apps" and .headBranch == $branch
+          ' "$RUNNER_TEMP/native-run.json"
+          source_sha=$(jq -r .headSha "$RUNNER_TEMP/native-run.json")
+          git merge-base --is-ancestor "$source_sha" HEAD
+          git diff --exit-code "$source_sha" HEAD -- native/
+          gh run download "$NATIVE_RUN" --name pin-iced-linux --dir "$RUNNER_TEMP/pin-native"
+          chmod 755 "$RUNNER_TEMP/pin-native/pin-iced"
+          if ldd "$RUNNER_TEMP/pin-native/pin-iced" | grep -E 'not found|libwebkit|libgtk'; then
+            exit 1
+          fi
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("native/Cargo.toml", "rb"))["package"]["version"])')
+          mkdir -p candidate
+          binary_sha=$(sha256sum "$RUNNER_TEMP/pin-native/pin-iced" | cut -d ' ' -f1)
+          jq -n --arg commit "$source_sha" --arg native "$NATIVE_RUN" --arg pkg "$GITHUB_SHA" --arg version "$version" --arg sha "$binary_sha"             '{source_commit:$commit,native_run:$native,packaging_commit:$pkg,version:$version,binary_sha256:$sha}' > candidate/BUILDINFO.json
+          echo "PIN_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Install tools and assemble packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends snapd squashfs-tools desktop-file-utils xvfb xauth xdotool libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2
+          tool="$RUNNER_TEMP/appimagetool"
+          curl --max-time 90 -fsSLo "$tool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          printf '%s  %s\n' ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 "$tool" | sha256sum -c
+          chmod 755 "$tool"
+          bash packaging/native-candidate.sh "$RUNNER_TEMP/pin-native/pin-iced" candidate "$tool" "$PIN_VERSION"
+      - name: Launch the installed Debian package and the AppImage offscreen
+        run: |
+          sudo apt-get install -y "./candidate/pinned_${PIN_VERSION}_amd64.deb"
+          xvfb-run -a bash -euo pipefail <<'CHECK'
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          for command in /usr/bin/pinned "$PWD/candidate/Pin-$PIN_VERSION.AppImage"; do
+            sandbox=$(mktemp -d)
+            export HOME="$sandbox" XDG_CONFIG_HOME="$sandbox/config" XDG_DATA_HOME="$sandbox/data"
+            export PRIORITIES_FILE="$sandbox/Priorities.md"
+            printf '%s\n' '- [ ] Release candidate smoke' > "$PRIORITIES_FILE"
+            "$command" &
+            pid=$!
+            if ! timeout 15 xdotool search --sync --onlyvisible --name '^Pin' >/dev/null; then
+              kill "$pid" || true
+              exit 1
+            fi
+            kill "$pid" || true
+            wait "$pid" || true
+            grep -Fx -- '- [ ] Release candidate smoke' "$PRIORITIES_FILE"
+          done
+          CHECK
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pin-native-package-candidate-${{ github.sha }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Pin
+Comment=Keep your ranked priorities on top of every window
+Exec=pinned
+Icon=pin
+Terminal=false
+Categories=Utility;
+Keywords=todo;tasks;priorities;sticky;note;
+StartupWMClass=pin
