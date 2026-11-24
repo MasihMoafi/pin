@@ -60,7 +60,7 @@ cp -a "$payload" "$snap"
   cd "$scratch"
   apt-get download libx11-6 libx11-xcb1 libxau6 libxcb1 libxcb-xkb1 libxcursor1 \
     libxdmcp6 libxext6 libxfixes3 libxi6 libxinerama1 libxkbcommon0 \
-    libxkbcommon-x11-0 libxrandr2 libxrender1
+    libxkbcommon-x11-0 libxrandr2 libxrender1 xkb-data
   for dependency in ./*.deb; do
     dpkg-deb -x "$dependency" "$snap"
   done
@@ -83,6 +83,7 @@ apps:
     plugs: [home, desktop, x11]
     environment:
       LD_LIBRARY_PATH: \$SNAP/usr/lib/x86_64-linux-gnu
+      XKB_CONFIG_ROOT: \$SNAP/usr/share/X11/xkb
 META
 snap pack "$snap" "$output"
 unsquashfs -cat "$output/pinned_${version}_amd64.snap" usr/bin/pinned > "$scratch/snap-binary"
