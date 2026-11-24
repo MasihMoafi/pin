@@ -147,3 +147,13 @@ jobs:
           set -o pipefail
           snapcraft names --format json |
             jq -e '.snaps[] | select(.name == "pinned") | {name, visibility}'
+          export PYTHONPATH=/snap/snapcraft/current/lib/python3.12/site-packages
+          /snap/snapcraft/current/usr/bin/python3.12 - <<'PY'
+          from snapcraft.store import StoreClientCLI, constants
+
+          client = StoreClientCLI()
+          pin = client.get_account_info()["snaps"][constants.DEFAULT_SERIES]["pinned"]
+          url = f"https://dashboard.snapcraft.io/dev/api/snaps/{pin['snap-id']}/metadata"
+          metadata = client.request("GET", url, headers={"Accept": "application/json"}).json()
+          print({key: metadata[key] for key in ("private", "unlisted")})
+          PY
