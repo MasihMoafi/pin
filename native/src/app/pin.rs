@@ -1140,12 +1140,9 @@ impl State {
                 );
             } else {
                 let clear = button(
-                    row![
-                        action_icon("trash", 14, false),
-                        text("Clear history").size(13)
-                    ]
-                    .spacing(6)
-                    .align_y(iced::Center),
+                    row![action_icon("trash", 14, false), text("Clear done").size(13)]
+                        .spacing(6)
+                        .align_y(iced::Center),
                 )
                 .padding([7, 9])
                 .on_press(Message::ClearHistory)
@@ -1157,7 +1154,7 @@ impl State {
                 body = body.push(
                     container(
                         text(if self.completed_count() > 0 {
-                            "All clear — check History or add a priority."
+                            "All clear — check Done or add a priority."
                         } else {
                             "Add your first priority."
                         })

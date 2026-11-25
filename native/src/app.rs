@@ -1031,7 +1031,7 @@ impl Notes {
                     if in_history {
                         "Show active tasks (Ctrl+H)"
                     } else {
-                        "Show history (Ctrl+H)"
+                        "Show done tasks (Ctrl+H)"
                     },
                     if in_history { "left" } else { "clock" },
                     Some(history_action),
@@ -1047,7 +1047,7 @@ impl Notes {
                             Message::Board(pin::Message::ShowHistory(false)),
                         ),
                         header_tab(
-                            format!("History ({history_count})"),
+                            format!("Done ({history_count})"),
                             in_history,
                             !in_history && self.focus == 11,
                             Message::Board(pin::Message::ShowHistory(true)),
