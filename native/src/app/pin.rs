@@ -62,6 +62,11 @@ pub enum Message {
     PickDate(NaiveDate),
     TimePart(bool, String),
     Daily,
+    OpenColor,
+    QuickDate(bool),
+    Pin,
+    Shortcuts,
+    Escape,
     Color(Option<String>),
     ApplyDate,
     ClearDate,
@@ -147,6 +152,37 @@ pub struct State {
     offset: scrollable::AbsoluteOffset,
     drag: drag::Drag,
     pub revision: u64,
+}
+
+pub fn shortcut(physical: Physical, modifiers: keyboard::Modifiers) -> Option<Message> {
+    if physical == Physical::Code(Code::F1) && !modifiers.command() && !modifiers.alt() {
+        return Some(Message::Shortcuts);
+    }
+    if modifiers.command() && !modifiers.alt() {
+        return match physical {
+            Physical::Code(Code::KeyR) if !modifiers.shift() => Some(Message::Daily),
+            Physical::Code(Code::KeyC) if modifiers.shift() => Some(Message::OpenColor),
+            Physical::Code(Code::KeyD) if modifiers.shift() => Some(Message::ClearDate),
+            Physical::Code(Code::KeyP) if !modifiers.shift() => Some(Message::Pin),
+            Physical::Code(Code::Slash) => Some(Message::Shortcuts),
+            _ => None,
+        };
+    }
+    if modifiers.alt() && !modifiers.command() && !modifiers.shift() {
+        return match physical {
+            Physical::Code(Code::Digit0) => Some(Message::Color(None)),
+            Physical::Code(Code::Digit1) => Some(Message::Color(Some("🔴".into()))),
+            Physical::Code(Code::Digit2) => Some(Message::Color(Some("🟠".into()))),
+            Physical::Code(Code::Digit3) => Some(Message::Color(Some("🟡".into()))),
+            Physical::Code(Code::Digit4) => Some(Message::Color(Some("🟢".into()))),
+            Physical::Code(Code::Digit5) => Some(Message::Color(Some("🔵".into()))),
+            Physical::Code(Code::Digit6) => Some(Message::Color(Some("🟣".into()))),
+            Physical::Code(Code::KeyT) => Some(Message::QuickDate(false)),
+            Physical::Code(Code::KeyM) => Some(Message::QuickDate(true)),
+            _ => None,
+        };
+    }
+    None
 }
 
 impl State {
@@ -339,6 +375,7 @@ impl State {
             | Message::PickDate(_)
             | Message::TimePart(_, _)
             | Message::Daily
+            | Message::QuickDate(_)
             | Message::Color(_)
             | Message::ApplyDate
             | Message::ClearDate
@@ -641,8 +678,32 @@ impl State {
                 let save = self.update(Message::ApplyDate);
                 return save.chain(self.update(Message::Panel(Panel::Time)));
             }
+            Message::OpenColor => {
+                let id = self.item_id();
+                if self.options.is_none() {
+                    let _ = self.update(Message::Options(id));
+                }
+                return self.update(Message::Panel(Panel::Color));
+            }
+            Message::QuickDate(tomorrow) => {
+                if let Some(i) = self.board.index(self.item_id()) {
+                    let day =
+                        Local::now().date_naive() + chrono::Duration::days(i64::from(tomorrow));
+                    let time = self.board.tasks[i]
+                        .date
+                        .as_deref()
+                        .and_then(|d| d.split_once(' ').map(|(_, t)| t.to_owned()));
+                    let value = time.map_or_else(|| day.to_string(), |t| format!("{day} {t}"));
+                    self.board.tasks[i].date = Some(value);
+                    if let Some(o) = &mut self.options {
+                        o.date = text_editor::Content::with_text(&day.to_string());
+                        o.calendar = day;
+                    }
+                    self.revision += 1;
+                }
+            }
             Message::Daily => {
-                let id = self.options_item();
+                let id = self.item_id();
                 if let Some(i) = self.board.index(id) {
                     let t = &mut self.board.tasks[i];
                     t.daily = !t.daily;
@@ -651,7 +712,7 @@ impl State {
                 }
             }
             Message::Color(color) => {
-                if let Some(i) = self.board.index(self.options_item()) {
+                if let Some(i) = self.board.index(self.item_id()) {
                     self.board.tasks[i].color = color;
                     self.revision += 1;
                 }
@@ -680,7 +741,7 @@ impl State {
                         format!("{d} {time}")
                     };
                     if valid_date(&value) {
-                        if let Some(i) = self.board.index(self.options_item()) {
+                        if let Some(i) = self.board.index(self.item_id()) {
                             self.board.tasks[i].date = (!value.is_empty()).then_some(value);
                             self.revision += 1;
                             self.options.as_mut().unwrap().error = None;
@@ -697,7 +758,7 @@ impl State {
                 return self.update(Message::ApplyDate);
             }
             Message::ClearDate => {
-                if let Some(i) = self.board.index(self.options_item()) {
+                if let Some(i) = self.board.index(self.item_id()) {
                     self.board.tasks[i].date = None;
                     if let Some(o) = &mut self.options {
                         o.date = text_editor::Content::new();
@@ -814,7 +875,10 @@ impl State {
             | Message::Redo
             | Message::Save
             | Message::Header(_)
-            | Message::Context(_) => (),
+            | Message::Context(_)
+            | Message::Pin
+            | Message::Shortcuts
+            | Message::Escape => (),
         }
         Task::none()
     }
@@ -907,6 +971,9 @@ impl State {
             Target::Item(id) => id,
             _ => self.options_item(),
         };
+        if let Some(message) = shortcut(press.physical_key, press.modifiers) {
+            return Some(B::Custom(message));
+        }
         let custom = if command {
             match press.physical_key {
                 Physical::Code(Code::KeyZ) => {
@@ -962,9 +1029,7 @@ impl State {
                     matches!(press.key.as_ref(), keyboard::Key::Named(Named::ArrowDown)),
                 ))
             }
-            keyboard::Key::Named(Named::Escape) if self.options.is_some() => {
-                Some(Message::CloseOptions)
-            }
+            keyboard::Key::Named(Named::Escape) => Some(Message::Escape),
             keyboard::Key::Named(Named::ContextMenu) => Some(Message::Context(target)),
             keyboard::Key::Named(Named::F10) if shift => Some(Message::Context(target)),
             _ => None,
@@ -1311,10 +1376,51 @@ impl State {
     fn option_button<'a>(&'a self, label: impl Into<String>, focus: u8) -> Element<'a, Message> {
         let focused = self.options.as_ref().is_some_and(|o| o.focus == focus);
         container(
-            button(text(label.into()).size(13))
-                .padding([6, 9])
-                .on_press_maybe(self.option_action(focus))
-                .style(move |theme, status| focus_style(theme, status, focused)),
+            button({
+                let hint = if self
+                    .options
+                    .as_ref()
+                    .is_some_and(|o| o.panel == Panel::Main)
+                {
+                    match focus {
+                        0 => "Ctrl+R",
+                        1 => "Ctrl+D",
+                        18 => "Ctrl+Shift+C",
+                        20 => "Ctrl+Shift+N",
+                        21 => "Ctrl+Shift+Backspace",
+                        _ => "",
+                    }
+                } else {
+                    ""
+                };
+                let label = label.into();
+                let content: Element<'_, Message> = if hint.is_empty() {
+                    text(label).size(13).into()
+                } else {
+                    row![
+                        text(label).size(13),
+                        space().width(Fill),
+                        text(hint).size(11).color(super::MUTED)
+                    ]
+                    .align_y(iced::Center)
+                    .into()
+                };
+                content
+            })
+            .width(
+                if self
+                    .options
+                    .as_ref()
+                    .is_some_and(|o| o.panel == Panel::Main)
+                {
+                    Length::Fill
+                } else {
+                    Length::Shrink
+                },
+            )
+            .padding([6, 9])
+            .on_press_maybe(self.option_action(focus))
+            .style(move |theme, status| focus_style(theme, status, focused)),
         )
         .id(format!("option-{focus}"))
         .into()
@@ -1456,6 +1562,7 @@ impl State {
                     ]
                     .align_y(iced::Center),
                 );
+                body = body.push(text("Alt+1–6 / Alt+0").size(11).color(super::MUTED));
                 for (n, colors) in COLORS.chunks(6).enumerate() {
                     let swatches = row(colors.iter().enumerate().map(|(j, (marker, hex))| {
                         let selected = item.color.as_deref() == Some(*marker);

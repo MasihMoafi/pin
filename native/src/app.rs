@@ -49,6 +49,7 @@ enum Message {
     Save,
     Tick,
     Pin,
+    Shortcuts,
     Minimize,
     Close,
     Window(window::Id, window::Event),
@@ -138,6 +139,7 @@ struct Notes {
     menu_focus: usize,
     input: EventCache,
     context: Option<Point>,
+    shortcuts: bool,
     initial_position: Option<(Point, bool)>,
 }
 
@@ -284,6 +286,7 @@ impl Notes {
             menu_focus: 0,
             input: EventCache::default(),
             context: None,
+            shortcuts: false,
             initial_position: None,
         };
         initial
@@ -342,9 +345,9 @@ impl Notes {
                     modifiers,
                     key,
                     ..
-                }) if status == event::Status::Ignored => {
-                    shortcut(physical_key, modifiers).or_else(|| navigation(&key, modifiers))
-                }
+                }) if status == event::Status::Ignored => shortcut(physical_key, modifiers)
+                    .or_else(|| pin::shortcut(physical_key, modifiers).map(Message::Board))
+                    .or_else(|| navigation(&key, modifiers)),
                 _ => None,
             })
             .with(self.input.clone())
@@ -576,6 +579,14 @@ impl Notes {
                     pin::Message::Undo => return self.update(Message::Undo),
                     pin::Message::Redo => return self.update(Message::Redo),
                     pin::Message::Save => return self.update(Message::Save),
+                    pin::Message::Pin => return self.update(Message::Pin),
+                    pin::Message::Shortcuts => return self.update(Message::Shortcuts),
+                    pin::Message::Escape => {
+                        if self.shortcuts {
+                            return self.update(Message::Shortcuts);
+                        }
+                        return self.update(Message::Context(false));
+                    }
                     pin::Message::Header(reverse) => {
                         self.focus = if reverse { 6 } else { 9 };
                         return Task::none();
@@ -675,6 +686,11 @@ impl Notes {
                             }
                         }
                     }
+                }
+            }
+            Message::Shortcuts => {
+                if self.board.is_some() {
+                    self.shortcuts = !self.shortcuts;
                 }
             }
             Message::Pin => {
@@ -811,6 +827,10 @@ impl Notes {
             }
             Message::Pointer(p) => self.input.0.lock().unwrap().pointer = p,
             Message::Context(open) => {
+                if !open && self.shortcuts {
+                    self.shortcuts = false;
+                    return self.focus_editor();
+                }
                 let was_open = self.context.is_some();
                 self.context = if open {
                     Some(self.input.0.lock().unwrap().pointer)
@@ -1065,11 +1085,7 @@ impl Notes {
                     .style(|theme| container::Style::default().background(line(theme)))
                     .into(),
                 icon_button(
-                    if self.bounds.pinned.unwrap_or(true) {
-                        "Unpin from top"
-                    } else {
-                        "Keep on top"
-                    },
+                    "Always on top (Ctrl+P)",
                     if self.bounds.pinned.unwrap_or(true) {
                         "pin-filled"
                     } else {
@@ -1251,6 +1267,59 @@ impl Notes {
                 right: 0.,
                 bottom: 0.,
             }));
+        }
+        if self.shortcuts {
+            let entries = [
+                ("New task / subtask", "Ctrl+N / Ctrl+Shift+N"),
+                ("Undo / redo", "Ctrl+Z / Ctrl+Shift+Z"),
+                ("Save / pin window", "Ctrl+S / Ctrl+P"),
+                ("Daily / options", "Ctrl+R / Ctrl+D"),
+                ("Color picker", "Ctrl+Shift+C"),
+                ("Colors / clear color", "Alt+1–6 / Alt+0"),
+                ("Today / tomorrow", "Alt+T / Alt+M"),
+                ("Clear date", "Ctrl+Shift+D"),
+                ("Complete / delete", "Ctrl+Enter / Ctrl+Shift+Backspace"),
+                ("Move / indent", "Alt+↑↓ / Tab"),
+                ("Shortcuts", "Ctrl+/ / F1"),
+            ];
+            let mut content = column![text("Keyboard shortcuts").size(15)]
+                .spacing(8)
+                .padding(12);
+            for (label, keys) in entries {
+                content = content.push(
+                    row![
+                        text(label).size(12),
+                        space().width(Fill),
+                        text(keys).size(10).color(MUTED)
+                    ]
+                    .spacing(6)
+                    .align_y(iced::Center),
+                );
+            }
+            let panel = container(scrollable(content).height(Length::Shrink))
+                .width((self.bounds.width - 24.).min(420.))
+                .max_height((self.bounds.height - 24.).max(80.))
+                .style(|theme| container::Style {
+                    background: Some(bg(theme).into()),
+                    text_color: Some(fg(theme)),
+                    border: Border {
+                        color: line(theme),
+                        width: 1.,
+                        radius: 6.into(),
+                    },
+                    ..Default::default()
+                });
+            layers = layers.push(
+                mouse_area(container(space()).width(Fill).height(Fill))
+                    .on_press(Message::Shortcuts),
+            );
+            layers = layers.push(
+                container(iced::widget::opaque(panel))
+                    .width(Fill)
+                    .height(Fill)
+                    .center_x(Fill)
+                    .center_y(Fill),
+            );
         }
         for direction in [
             window::Direction::North,
