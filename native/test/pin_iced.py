@@ -355,6 +355,14 @@ try:
     assert ImageChops.difference(closed, f1_open).getbbox(), 'F1 did not open shortcuts'
     x('key', 'F1')
     close()
+    p, wid, file, _ = start('shortcuts-dark', '- [ ] First\n', theme='Dark')
+    for width in [460, 350, 280]:
+        x('windowsize', wid, width * scale, 440 * scale)
+        x('key', 'F1')
+        time.sleep(.3)
+        shot('pin-shortcuts-dark-' + str(width))
+        x('key', 'Escape')
+    close()
     check('Daily, colors, dates, pin and shortcut overlay use physical shortcuts')
     p, wid, file, _ = start('unicode', '- [ ] First priority\n- [ ] Second priority\n')
     click(115, 73)
