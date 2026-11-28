@@ -1118,7 +1118,7 @@ impl State {
             .key_binding(move |p| self.binding(Target::Item(id), p));
         let mut content =
             column![mouse_area(editor).on_right_press(Message::Context(Target::Item(id)))];
-        if t.date.is_some() || t.daily {
+        if t.date.is_some() {
             let mut badges = row![].spacing(8).align_y(iced::Center);
             if let Some(date) = &t.date {
                 let label = display_date(date);
@@ -1134,9 +1134,6 @@ impl State {
                         super::MUTED
                     },
                 ));
-            }
-            if t.daily {
-                badges = badges.push(text("↻ Daily").size(11).color(super::MUTED));
             }
             content = content.push(badges);
         }
@@ -1207,6 +1204,14 @@ impl State {
                     text_color: None,
                 }
             });
+        let daily: Element<'_, Message> = if t.daily {
+            container(text("↻ Daily").size(11).color(super::MUTED))
+                .height(CONTROL_HEIGHT)
+                .align_y(iced::Center)
+                .into()
+        } else {
+            space().width(0).into()
+        };
         let row = row![
             container(chevron)
                 .height(CONTROL_HEIGHT)
@@ -1219,6 +1224,7 @@ impl State {
                     ..Default::default()
                 }),
             container(content).width(Fill),
+            daily,
             container(delete)
                 .height(CONTROL_HEIGHT)
                 .align_y(iced::Center),

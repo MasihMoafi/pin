@@ -31,7 +31,7 @@ The original TypeScript implementation (`src/`, built to `dist/`) remains for ex
 
 ## Tasks
 - Task text wraps and grows vertically at every window width; no line may be clipped.
-- The task options offer daily recurrence; completed daily tasks reopen on the next local date, preserving any time.
+- The task options offer daily recurrence; its compact badge stays on the first title line before the action icons, including in narrow windows. Completed daily tasks reopen on the next local date, preserving any time.
 - Completed tasks go last among their siblings; a newly completed task goes to the very bottom with its subtasks.
   Unfinished siblings keep their priority order. Reopening a task puts it after the unfinished siblings; undo restores its previous place and status together.
 - Each row has a checkbox, text, a trash button immediately left of + (add subtask), and ⋯ (daily recurrence, color, date, subtask, delete). Trash removes that row and its subtasks; Ctrl+Z restores them exactly and Ctrl+Y / Ctrl+Shift+Z redo the removal. The + adds a child to that row even when another task has focus, unfolds its parent, and focuses the child. Options open as dropdown menus over the list; dates use a month calendar and times use hour/minute dropdowns, as in the earlier calendar UI.

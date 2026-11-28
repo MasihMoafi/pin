@@ -253,6 +253,40 @@ try:
     saved(f'- [ ] Daily 📅 {today} 09:30 🔁 daily\n- [x] One-off\n')
     close()
     check('Daily tasks reopen after an overnight restart and preserve their time')
+    # Identical short tasks must keep the same row height with or without a badge.
+    inline = '- [ ] A\n- [ ] A 🔁 daily\n- [ ] A\n'
+    p, wid, file, _ = start('daily-inline', inline)
+    for width in [460, 350, 280]:
+        x('windowsize', wid, width * scale, 440 * scale)
+        time.sleep(.5)
+        picture = shot('pin-daily-inline-' + str(width)).convert('RGB')
+        boxes = row_checks['checkboxes'](picture, scale)
+        assert len(boxes) == 3, (width, boxes)
+        row_checks['alignment'](picture, scale, boxes)
+        gaps = [(b[1] - a[1]) / scale for a, b in zip(boxes, boxes[1:])]
+        assert abs(gaps[0] - gaps[1]) <= 1, (width, gaps)
+        # The only difference between these rows is the badge, ahead of the controls.
+        pixels = picture.load()
+        badge_pixels = sum(
+            pixels[x, boxes[0][1] + dy] != pixels[x, boxes[1][1] + dy]
+            for x in range((width - 180) * scale, (width - 125) * scale)
+            for dy in range(17 * scale)
+        )
+        assert badge_pixels > 8 * scale, (width, badge_pixels)
+    saved(inline)
+    close()
+    check('Daily badge keeps short rows the same height at normal and narrow widths')
+    recurring_wrap = '- [ ] Read research and take notes 🔁 daily\n- [ ] A 📅 2028-02-29 🔁 daily\n'
+    p, wid, file, _ = start('daily-wrapped', recurring_wrap)
+    x('windowsize', wid, 280 * scale, 440 * scale)
+    time.sleep(.5)
+    picture = shot('pin-daily-wrapped').convert('RGB')
+    boxes = row_checks['checkboxes'](picture, scale)
+    assert len(boxes) == 2, boxes
+    row_checks['alignment'](picture, scale, boxes)
+    saved(recurring_wrap)
+    close()
+    check('Wrapped daily tasks and tasks with dates retain their controls at the narrowest width')
     p, wid, file, _ = start('colors')
     click(115, 73)
     x('key', 'ctrl+d', 'Tab', 'Tab', 'Return', *(['Tab'] * 6), 'Return')
