@@ -915,6 +915,7 @@ impl State {
             25 => Message::Panel(Panel::Hours),
             26 => Message::Panel(Panel::Minutes),
             27 => Message::ClearTime,
+            28 => Message::Shortcuts,
             64..=123 if matches!(o.panel, Panel::Hours | Panel::Minutes) => {
                 Message::TimePart(o.panel == Panel::Hours, format!("{:02}", focus - 64))
             }
@@ -928,7 +929,7 @@ impl State {
             return vec![];
         };
         match o.panel {
-            Panel::Main => vec![0, 1, 2, 18, 20, 21, 22],
+            Panel::Main => vec![0, 1, 2, 18, 20, 21, 28, 22],
             Panel::Date => {
                 let mut order = vec![22, 23, 24];
                 order.extend(
@@ -1108,7 +1109,7 @@ impl State {
         };
         let width = 270_f32.min(size.width - 20.);
         let height = match o.panel {
-            Panel::Main => 260_f32,
+            Panel::Main => 300_f32,
             Panel::Date => 350.,
             Panel::Time => 170.,
             Panel::Color => 235.,
@@ -1388,6 +1389,7 @@ impl State {
                         18 => "Ctrl+Shift+C",
                         20 => "Ctrl+Shift+N",
                         21 => "Ctrl+Shift+Backspace",
+                        28 => "Ctrl+/",
                         _ => "",
                     }
                 } else {
@@ -1455,6 +1457,7 @@ impl State {
                     .push(self.option_button("Color…", 18))
                     .push(self.option_button("Add subtask", 20))
                     .push(self.option_button("Delete task", 21))
+                    .push(self.option_button("Keyboard shortcuts", 28))
                     .push(self.option_button("Close", 22));
             }
             Panel::Date => {
