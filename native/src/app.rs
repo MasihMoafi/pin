@@ -1270,16 +1270,19 @@ impl Notes {
         }
         if self.shortcuts {
             let entries = [
-                ("New task / subtask", "Ctrl+N / Ctrl+Shift+N"),
-                ("Undo / redo", "Ctrl+Z / Ctrl+Shift+Z"),
+                ("New task", "Ctrl+N"),
+                ("New subtask", "Ctrl+Shift+N / Ctrl+T"),
+                ("Undo / redo", "Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y"),
                 ("Save / pin window", "Ctrl+S / Ctrl+P"),
                 ("Daily / options", "Ctrl+R / Ctrl+D"),
                 ("Color picker", "Ctrl+Shift+C"),
                 ("Colors / clear color", "Alt+1–6 / Alt+0"),
                 ("Today / tomorrow", "Alt+T / Alt+M"),
                 ("Clear date", "Ctrl+Shift+D"),
-                ("Complete / delete", "Ctrl+Enter / Ctrl+Shift+Backspace"),
-                ("Move / indent", "Alt+↑↓ / Tab"),
+                ("Complete", "Ctrl+Enter"),
+                ("Delete", "Ctrl+Shift+Backspace"),
+                ("Move / indent", "Alt+↑↓ / Tab / Shift+Tab"),
+                ("Fold", "Ctrl+."),
                 ("Shortcuts", "Ctrl+/ / F1"),
             ];
             let mut content = column![text("Keyboard shortcuts").size(15)]

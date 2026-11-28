@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from PIL import ImageGrab
+from PIL import ImageChops, ImageGrab
 
 baseline, variant = (str(Path(p).resolve()) for p in sys.argv[1:3])
 out = Path(sys.argv[3]).resolve()
@@ -339,10 +339,21 @@ try:
     wait(above, 'Ctrl+P pins')
     for width in [460, 350, 280]:
         x('windowsize', wid, width * scale, 440 * scale)
+        time.sleep(.3)
+        before = shot('pin-shortcuts-before-' + str(width))
         x('key', 'ctrl+slash')
         time.sleep(.3)
-        shot('pin-shortcuts' if width == 460 else 'pin-shortcuts-' + str(width))
+        opened = shot('pin-shortcuts' if width == 460 else 'pin-shortcuts-' + str(width))
+        assert ImageChops.difference(before, opened).getbbox(), 'Shortcut overlay did not open'
         x('key', 'Escape')
+        time.sleep(.3)
+        closed = shot('pin-shortcuts-closed-' + str(width))
+        assert ImageChops.difference(opened, closed).getbbox(), 'Escape did not close shortcuts'
+    x('key', 'F1')
+    time.sleep(.3)
+    f1_open = shot('pin-shortcuts-f1')
+    assert ImageChops.difference(closed, f1_open).getbbox(), 'F1 did not open shortcuts'
+    x('key', 'F1')
     close()
     check('Daily, colors, dates, pin and shortcut overlay use physical shortcuts')
     p, wid, file, _ = start('unicode', '- [ ] First priority\n- [ ] Second priority\n')
