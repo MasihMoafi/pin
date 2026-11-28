@@ -786,6 +786,9 @@ impl State {
             Message::Activate => {
                 if let Some(o) = &self.options {
                     if let Some(action) = self.option_action(o.focus) {
+                        if matches!(action, Message::Shortcuts) {
+                            return Task::done(action);
+                        }
                         return self.update(action);
                     }
                 }

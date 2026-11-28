@@ -309,6 +309,10 @@ try:
     check('Palette and custom colors work through the keyboard and share undo/redo')
     p, wid, file, _ = start('shortcuts', '- [ ] First 📅 2028-02-29 09:30\n')
     click(115, 73)
+    x('key', 'ctrl+d', 'shift+Tab', 'shift+Tab', 'shift+Tab', 'Return')
+    time.sleep(.3)
+    shot('pin-shortcuts-from-options')
+    x('key', 'Escape', 'Escape')
     for layout in [0, 1]:
         group(layout)
         physical(27)  # Ctrl+R, physical on both keyboard layouts
